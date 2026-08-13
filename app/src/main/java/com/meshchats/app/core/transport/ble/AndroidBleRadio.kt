@@ -1,5 +1,6 @@
 package com.meshchats.app.core.transport.ble
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
@@ -43,7 +44,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  * routed to `onError` at most once per active start (guarded by [errorFired],
  * reset on [stop]), and the controller catches [SecurityException] at its
  * boundary, so this class can call the guarded APIs directly.
+ *
+ * ### Permission suppression
+ * BLE calls here (advertise/scan/stop) require BLUETOOTH_SCAN / BLUETOOTH_ADVERTISE
+ * (or the pre-31 location grant). Lint cannot see the guard because it lives at the
+ * controller boundary: [DefaultBleDiscoveryController] checks [BleRadio.missingPermissions]
+ * before ever calling [start], and wraps every radio call in `runCatching`, turning a
+ * revoked-permission [SecurityException] into a bounded Error state instead of a crash.
+ * That makes the MissingPermission check a false positive for this adapter, so it is
+ * suppressed at the class level.
  */
+@SuppressLint("MissingPermission")
 class AndroidBleRadio(
     context: Context,
     private val serviceUuid: UUID = BleDiscoveryController.SERVICE_UUID,

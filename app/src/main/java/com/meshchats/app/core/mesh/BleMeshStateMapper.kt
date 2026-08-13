@@ -47,12 +47,12 @@ object BleMeshStateMapper {
 
             is BleDiscoveryState.Scanning ->
                 if (state.peers.isEmpty()) {
-                    TransportState.Idle to "Scanning · no peers"
+                    TransportState.Idle to "Scanning while this screen is open · no peers"
                 } else {
                     val count = state.peers.size
                     val noun = if (count == 1) "peer" else "peers"
                     TransportState.Active(peers = count, throughputBps = 0L) to
-                        "Scanning · $count $noun"
+                        "Scanning while this screen is open · $count $noun"
                 }
 
             is BleDiscoveryState.Error ->

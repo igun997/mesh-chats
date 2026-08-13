@@ -60,7 +60,7 @@ class BleMeshStateMapperTest {
         val status = BleMeshStateMapper.toTransportStatus(BleDiscoveryState.Scanning(emptyList()))
 
         assertEquals(TransportState.Idle, status.state)
-        assertEquals("Scanning · no peers", status.detail)
+        assertEquals("Scanning while this screen is open · no peers", status.detail)
     }
 
     @Test
@@ -70,7 +70,7 @@ class BleMeshStateMapperTest {
         )
 
         assertEquals(TransportState.Active(peers = 1, throughputBps = 0), status.state)
-        assertEquals("Scanning · 1 peer", status.detail)
+        assertEquals("Scanning while this screen is open · 1 peer", status.detail)
     }
 
     @Test
@@ -80,7 +80,7 @@ class BleMeshStateMapperTest {
         )
 
         assertEquals(TransportState.Active(peers = 3, throughputBps = 0), status.state)
-        assertEquals("Scanning · 3 peers", status.detail)
+        assertEquals("Scanning while this screen is open · 3 peers", status.detail)
     }
 
     @Test

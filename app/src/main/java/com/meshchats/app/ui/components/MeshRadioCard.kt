@@ -18,6 +18,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.meshchats.app.core.mesh.TransportState
@@ -38,6 +40,9 @@ fun MeshRadioCard(
     onToggle: (Boolean) -> Unit,
     onAttach: () -> Unit,
     modifier: Modifier = Modifier,
+    // Some transports (Bluetooth) are driven by a lifecycle/status action
+    // elsewhere, so they hide the manual switch rather than show a misleading one.
+    showToggle: Boolean = true,
 ) {
     val tokens = LocalMeshTokens.current
     val shape = RoundedCornerShape(12.dp)
@@ -71,12 +76,15 @@ fun MeshRadioCard(
             }
         }
 
-        if (absent) {
+        if (absent && showToggle) {
             TextButton(onClick = onAttach) { Text("Attach") }
-        } else {
+        } else if (!absent && showToggle) {
             Switch(
                 checked = status.isAvailable,
                 onCheckedChange = onToggle,
+                modifier = Modifier.semantics {
+                    contentDescription = "${status.id.label} enabled"
+                },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.onSurface,
                     checkedTrackColor = MaterialTheme.colorScheme.surfaceVariant,

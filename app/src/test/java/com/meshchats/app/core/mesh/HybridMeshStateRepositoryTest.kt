@@ -105,7 +105,7 @@ class HybridMeshStateRepositoryTest {
             val state = repo.state.value
             val bt = state.transport(TransportId.BT)!!
             assertEquals(TransportState.Active(peers = 1, throughputBps = 0), bt.state)
-            assertEquals("Scanning · 1 peer", bt.detail)
+            assertEquals("Scanning while this screen is open · 1 peer", bt.detail)
 
             // The seeded non-BLE peers survive the overlay untouched.
             assertTrue(state.peers.any { it.id == "peer-1" })
@@ -133,13 +133,13 @@ class HybridMeshStateRepositoryTest {
 
         controller.emit(BleDiscoveryState.Scanning(listOf(blePeer(1L))))
         runCurrent()
-        assertEquals("Scanning · 1 peer", repo.state.value.transport(TransportId.BT)!!.detail)
+        assertEquals("Scanning while this screen is open · 1 peer", repo.state.value.transport(TransportId.BT)!!.detail)
 
         controller.emit(BleDiscoveryState.Scanning(listOf(blePeer(1L), blePeer(2L))))
         runCurrent()
         val bt = repo.state.value.transport(TransportId.BT)!!
         assertEquals(TransportState.Active(peers = 2, throughputBps = 0), bt.state)
-        assertEquals("Scanning · 2 peers", bt.detail)
+        assertEquals("Scanning while this screen is open · 2 peers", bt.detail)
         assertEquals(2, repo.state.value.peers.count { it.id.startsWith("ble-") })
     }
 
