@@ -18,8 +18,8 @@ data class DiscoveredBlePeer(
  * Tracks BLE peers seen during discovery, deduplicated by node ID and expired
  * after a fixed liveness window. Time is injected so tests are deterministic.
  *
- * Not thread-safe on its own; the owning controller confines access to a single
- * coroutine context.
+ * Not thread-safe on its own; the owning controller serializes all access under
+ * its private lock.
  */
 class DiscoveredBlePeerRegistry(
     private val clock: () -> Long,
