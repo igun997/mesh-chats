@@ -1,55 +1,94 @@
 package com.meshchats.app.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-
-private val LightScheme = lightColorScheme(
-    primary = MeshTealDark,
-    onPrimary = Color.White,
-    secondary = MeshSlate,
-    background = MeshMist,
-    surface = Color.White,
-    error = MeshCoral,
-)
 
 private val DarkScheme = darkColorScheme(
-    primary = MeshTeal,
-    onPrimary = MeshInk,
-    secondary = MeshMist,
-    background = MeshInk,
-    surface = MeshSlate,
-    error = MeshCoral,
+    primary = Paper0,
+    onPrimary = Ink0,
+    primaryContainer = Ink3,
+    onPrimaryContainer = Paper0,
+    secondary = Paper0.copy(alpha = AlphaSecondary),
+    onSecondary = Ink0,
+    background = Ink0,
+    onBackground = Paper0,
+    surface = Ink1,
+    onSurface = Paper0,
+    surfaceVariant = Ink2,
+    onSurfaceVariant = Paper0.copy(alpha = AlphaSecondary),
+    surfaceContainerHighest = Ink3,
+    outline = Paper0.copy(alpha = AlphaHairline),
+    outlineVariant = Paper0.copy(alpha = AlphaHairline),
+    inverseSurface = Paper0,
+    inverseOnSurface = Ink0,
+    // Monochrome by contract: errors are communicated by weight, glyph and copy.
+    error = Paper0,
+    onError = Ink0,
+    errorContainer = Ink3,
+    onErrorContainer = Paper0,
 )
 
+private val LightScheme = lightColorScheme(
+    primary = Ink0,
+    onPrimary = Paper0,
+    primaryContainer = Paper3,
+    onPrimaryContainer = Ink0,
+    secondary = Ink0.copy(alpha = AlphaSecondary),
+    onSecondary = Paper0,
+    background = Paper0,
+    onBackground = Ink0,
+    surface = Paper1,
+    onSurface = Ink0,
+    surfaceVariant = Paper2,
+    onSurfaceVariant = Ink0.copy(alpha = AlphaSecondary),
+    surfaceContainerHighest = Paper3,
+    outline = Ink0.copy(alpha = AlphaHairline),
+    outlineVariant = Ink0.copy(alpha = AlphaHairline),
+    inverseSurface = Ink0,
+    inverseOnSurface = Paper0,
+    error = Ink0,
+    onError = Paper0,
+    errorContainer = Paper3,
+    onErrorContainer = Ink0,
+)
+
+private fun tokensFor(onSurface: Color, inverseSurface: Color, inverseOnSurface: Color) =
+    MeshTokens(
+        hairline = onSurface.copy(alpha = AlphaHairline),
+        glyphActive = onSurface,
+        glyphIdle = onSurface.copy(alpha = AlphaMeta),
+        glyphOff = onSurface.copy(alpha = AlphaDisabled),
+        meta = onSurface.copy(alpha = AlphaMeta),
+        secondary = onSurface.copy(alpha = AlphaSecondary),
+        alarmBackground = inverseSurface,
+        alarmContent = inverseOnSurface,
+    )
+
 /**
- * App theme. Material You dynamic color on Android 12+, brand palette below elsewhere.
+ * Monochrome app theme. Dynamic color is intentionally unsupported: Material You
+ * would inject a different hue on every device and destroy the identity.
  */
 @Composable
 fun MeshChatsTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-
-        darkTheme -> DarkScheme
-        else -> LightScheme
+    val scheme = if (darkTheme) DarkScheme else LightScheme
+    val tokens = remember(darkTheme) {
+        tokensFor(scheme.onSurface, scheme.inverseSurface, scheme.inverseOnSurface)
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = MeshTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalMeshTokens provides tokens) {
+        MaterialTheme(
+            colorScheme = scheme,
+            typography = MeshTypography,
+            content = content,
+        )
+    }
 }

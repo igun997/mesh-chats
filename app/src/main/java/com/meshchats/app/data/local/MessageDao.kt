@@ -14,9 +14,15 @@ interface MessageDao {
 
     @Query(
         """
-        SELECT * FROM messages
-        WHERE sent_at IN (SELECT MAX(sent_at) FROM messages GROUP BY conversation_id)
-        ORDER BY sent_at DESC
+        SELECT * FROM messages AS message
+        WHERE message.id = (
+            SELECT candidate.id
+            FROM messages AS candidate
+            WHERE candidate.conversation_id = message.conversation_id
+            ORDER BY candidate.sent_at DESC, candidate.id DESC
+            LIMIT 1
+        )
+        ORDER BY message.sent_at DESC
         """,
     )
     fun observeLatestPerConversation(): Flow<List<MessageEntity>>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      minSdk is 26 and adaptive-icon XML is valid only in -v26. Moving these to
+      plain anydpi makes AAPT reject the resources, so ObsoleteSdkInt is a false
+      positive for this project's launcher icons.
+    -->
+    <issue id="ObsoleteSdkInt" severity="ignore" />
+</lint>
