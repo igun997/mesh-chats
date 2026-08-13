@@ -4,8 +4,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
@@ -79,12 +83,16 @@ class DefaultBleDiscoveryControllerTest {
         scope: TestScope,
         clock: () -> Long = { 0L },
         expiryIntervalMillis: Long = 5_000L,
+        publishIntervalMillis: Long = 500L,
+        registry: DiscoveredBlePeerRegistry = DiscoveredBlePeerRegistry(clock = clock),
+        beaconProvider: () -> BleBeacon = { localBeacon },
     ) = DefaultBleDiscoveryController(
         radio = radio,
-        registry = DiscoveredBlePeerRegistry(clock = clock),
+        registry = registry,
         scope = scope,
-        localBeacon = localBeacon,
+        beaconProvider = beaconProvider,
         expiryIntervalMillis = expiryIntervalMillis,
+        publishIntervalMillis = publishIntervalMillis,
     )
 
     @Test
@@ -181,18 +189,110 @@ class DefaultBleDiscoveryControllerTest {
     }
 
     @Test
-    fun `duplicate results update a single peer`() = runTest {
+    fun `duplicate results update a single peer after a publish tick`() = runTest {
         val radio = FakeBleRadio()
-        val controller = controller(radio, this)
+        val controller = controller(radio, this, publishIntervalMillis = 500L)
         controller.start()
 
+        // First sighting is a new peer: published immediately.
         radio.emit(beaconResult(7L, -80, setOf(BleCapability.CHAT)))
-        radio.emit(beaconResult(7L, -55, setOf(BleCapability.CHAT, BleCapability.SOS)))
+        assertEquals(
+            -80,
+            (controller.state.value as BleDiscoveryState.Scanning).peers.single().rssiDbm,
+        )
 
+        // Second sighting only refreshes an existing peer: deferred, not yet visible.
+        radio.emit(beaconResult(7L, -55, setOf(BleCapability.CHAT, BleCapability.SOS)))
+        assertEquals(
+            -80,
+            (controller.state.value as BleDiscoveryState.Scanning).peers.single().rssiDbm,
+        )
+
+        // After the publish tick the deferred update surfaces.
+        advanceTimeBy(501L)
         val peers = (controller.state.value as BleDiscoveryState.Scanning).peers
         assertEquals(1, peers.size)
         assertEquals(-55, peers[0].rssiDbm)
         assertEquals(setOf(BleCapability.CHAT, BleCapability.SOS), peers[0].capabilities)
+        controller.stop()
+    }
+
+    @Test
+    fun `a flood of distinct peers keeps the Scanning list bounded to the cap`() = runTest {
+        val radio = FakeBleRadio()
+        val controller = controller(
+            radio,
+            this,
+            registry = DiscoveredBlePeerRegistry(clock = { 0L }, maxPeers = 128),
+        )
+        controller.start()
+
+        repeat(1_000) { i ->
+            radio.emit(beaconResult(i.toLong(), -50, setOf(BleCapability.CHAT)))
+        }
+        advanceTimeBy(600L)
+
+        val peers = (controller.state.value as BleDiscoveryState.Scanning).peers
+        assertTrue(peers.size <= 128)
+        controller.stop()
+    }
+
+    @Test
+    fun `only the first peer publishes immediately then a flood of new ids coalesces`() = runTest {
+        val radio = FakeBleRadio()
+        val controller = controller(
+            radio,
+            this,
+            registry = DiscoveredBlePeerRegistry(clock = { 0L }, maxPeers = 128),
+            publishIntervalMillis = 500L,
+        )
+        controller.start()
+
+        // The first peer from an empty list surfaces immediately for responsiveness.
+        radio.emit(beaconResult(0L, -50, setOf(BleCapability.CHAT)))
+        assertEquals(1, (controller.state.value as BleDiscoveryState.Scanning).peers.size)
+
+        // A flood of *distinct* new ids must NOT re-sort and republish per packet;
+        // without advancing time the published list stays at the single first peer.
+        repeat(200) { i ->
+            radio.emit(beaconResult((i + 1).toLong(), -50, setOf(BleCapability.CHAT)))
+        }
+        assertEquals(1, (controller.state.value as BleDiscoveryState.Scanning).peers.size)
+
+        // One publish tick flushes the whole batch at once, bounded by the cap.
+        advanceTimeBy(501L)
+        assertEquals(128, (controller.state.value as BleDiscoveryState.Scanning).peers.size)
+        controller.stop()
+    }
+
+    @Test
+    fun `a flood emits one immediate publish then one tick, not one per packet`() = runTest {
+        val radio = FakeBleRadio()
+        val controller = controller(
+            radio,
+            this,
+            registry = DiscoveredBlePeerRegistry(clock = { 0L }, maxPeers = 128),
+            publishIntervalMillis = 500L,
+        )
+
+        val emissions = mutableListOf<BleDiscoveryState>()
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            controller.state.toList(emissions)
+        }
+
+        controller.start()
+        radio.emit(beaconResult(0L, -50, setOf(BleCapability.CHAT)))
+        repeat(200) { i ->
+            radio.emit(beaconResult((i + 1).toLong(), -50, setOf(BleCapability.CHAT)))
+        }
+        advanceTimeBy(501L)
+
+        // Scanning emissions: the empty list at start, the immediate first peer,
+        // and one coalesced publish tick for the flood -- three, not ~200.
+        val scanningEmissions = emissions.count { it is BleDiscoveryState.Scanning }
+        assertEquals(3, scanningEmissions)
+
+        collector.cancel()
         controller.stop()
     }
 
@@ -262,7 +362,7 @@ class DefaultBleDiscoveryControllerTest {
             assertEquals(1, radio.stopCount)
             assertTrue(controller.state.value is BleDiscoveryState.Error)
 
-            // The happy path must not have run: no expiry loop is scheduled, so
+            // The happy path must not have run: no loops are scheduled, so
             // advancing time cannot flip the state to Scanning.
             advanceTimeBy(60_000L)
             advanceUntilIdle()
@@ -364,12 +464,60 @@ class DefaultBleDiscoveryControllerTest {
         controller.start()
         controller.stop()
 
-        // If the expiry loop kept running, the scope would still have active
+        // If the loops kept running, the scope would still have active
         // children; advancing time should complete with no lingering work.
         advanceTimeBy(60_000L)
         advanceUntilIdle()
 
         assertEquals(BleDiscoveryState.Idle, controller.state.value)
         assertEquals(1, radio.stopCount)
+    }
+
+    // --- I2: ephemeral identity rotation ----------------------------------
+
+    @Test
+    fun `each start draws a fresh beacon and rotates the advertised node id`() = runTest {
+        val ids = ArrayDeque(listOf(111L, 222L))
+        val radio = FakeBleRadio()
+        val controller = controller(
+            radio,
+            this,
+            beaconProvider = {
+                BleBeacon(nodeId = ids.removeFirst(), capabilities = setOf(BleCapability.CHAT))
+            },
+        )
+
+        controller.start()
+        val first = BleDiscoveryProtocol.decode(radio.lastPayload!!)!!.nodeId
+        controller.stop()
+
+        controller.start()
+        val second = BleDiscoveryProtocol.decode(radio.lastPayload!!)!!.nodeId
+        controller.stop()
+
+        assertEquals(111L, first)
+        assertEquals(222L, second)
+        assertNotEquals(first, second)
+    }
+
+    @Test
+    fun `the beacon provider is invoked once per start`() = runTest {
+        var calls = 0
+        val radio = FakeBleRadio()
+        val controller = controller(
+            radio,
+            this,
+            beaconProvider = {
+                calls++
+                localBeacon
+            },
+        )
+
+        controller.start()
+        radio.emit(beaconResult(7L, -50, setOf(BleCapability.CHAT)))
+        radio.emit(beaconResult(8L, -50, setOf(BleCapability.CHAT)))
+
+        assertEquals(1, calls)
+        controller.stop()
     }
 }
