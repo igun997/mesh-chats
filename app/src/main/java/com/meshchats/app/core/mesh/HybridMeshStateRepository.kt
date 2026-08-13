@@ -1,5 +1,7 @@
 package com.meshchats.app.core.mesh
 
+import com.meshchats.app.core.transport.ble.BleDiscoveryController
+import com.meshchats.app.core.transport.ble.BleDiscoveryState
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.random.Random
@@ -12,28 +14,69 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Stand-in for real radios so the UI contract can be built and tested before any
- * transport exists. Ticks throughput and RSSI on purpose: the transport strip must
- * survive frequent updates without recomposing chat lists.
+ * Mesh state backed by **real BLE discovery** for the Bluetooth transport and its
+ * peers, with the remaining transports (Wi-Fi, LoRa, Relay) and any non-BLE peers
+ * still faked until those radios land. The name reflects that split: this is no
+ * longer a pure fake.
+ *
+ * The Bluetooth [TransportStatus] and every BLE [Peer] are derived from
+ * [BleDiscoveryController.state] via the pure [BleMeshStateMapper] and overlaid on
+ * top of the seeded fake state whenever discovery emits. There is no seeded fake
+ * Bluetooth-only peer any more: a peer only appears on BT if the radio actually
+ * discovered it, so the mesh tab never shows a peer that isn't there. Fake peers
+ * keep only their non-BT transports.
+ *
+ * ### Lifecycle
+ * This repository *observes* discovery on the injected application [scope]; it
+ * deliberately does not [BleDiscoveryController.start]/[stop] the controller.
+ * Starting and stopping discovery is tied to the Mesh screen's lifecycle and is
+ * owned elsewhere, so the app does not advertise and scan for the whole process
+ * lifetime.
+ *
+ * The RSSI/throughput jitter loop is retained for the still-fake transports so the
+ * transport strip keeps proving it survives frequent updates without recomposing
+ * chat lists; it never touches BLE-derived rows.
  */
 @Singleton
-class FakeMeshStateRepository @Inject constructor(
+class HybridMeshStateRepository(
     scope: CoroutineScope,
+    private val bleController: BleDiscoveryController,
+    // Exposed so tests can disable the still-fake jitter loop with
+    // Long.MAX_VALUE; production uses the [DEFAULT_JITTER_INTERVAL_MILLIS]
+    // secondary constructor below.
+    private val jitterIntervalMillis: Long,
 ) : MeshStateRepository {
+
+    @Inject
+    constructor(
+        scope: CoroutineScope,
+        bleController: BleDiscoveryController,
+    ) : this(scope, bleController, DEFAULT_JITTER_INTERVAL_MILLIS)
 
     private val _state = MutableStateFlow(seed())
     override val state: StateFlow<MeshState> = _state.asStateFlow()
 
     init {
+        // Overlay real BLE status + peers onto the fake baseline on every emission.
         scope.launch {
-            while (true) {
-                delay(2_000)
-                _state.update { current -> current.jitter() }
+            bleController.state.collect { discovery ->
+                _state.update { current -> current.withBle(discovery) }
+            }
+        }
+        if (jitterIntervalMillis != Long.MAX_VALUE) {
+            scope.launch {
+                while (true) {
+                    delay(jitterIntervalMillis)
+                    _state.update { current -> current.jitter() }
+                }
             }
         }
     }
 
     override fun setTransportEnabled(id: TransportId, enabled: Boolean) {
+        // BT enablement is driven by the discovery controller lifecycle, not a
+        // synthetic toggle; only the still-fake transports respond here.
+        if (id == TransportId.BT) return
         _state.update { current ->
             current.copy(
                 transports = current.transports.map { transport ->
@@ -71,10 +114,22 @@ class FakeMeshStateRepository @Inject constructor(
         }
     }
 
+    /** Replace the BT transport row and BLE peers with the mapped discovery state. */
+    private fun MeshState.withBle(discovery: BleDiscoveryState): MeshState {
+        val btConstraints = transport(TransportId.BT)?.constraints ?: BleTransportDefaults.CONSTRAINTS
+        val btStatus = BleMeshStateMapper.toTransportStatus(discovery, btConstraints)
+        val blePeers = BleMeshStateMapper.toPeers(discovery)
+        return copy(
+            transports = transports.map { if (it.id == TransportId.BT) btStatus else it },
+            // Non-BLE fake peers stay; BLE peers are entirely discovery-driven.
+            peers = peers.filterNot { it.id.startsWith(BLE_PEER_PREFIX) } + blePeers,
+        )
+    }
+
     private fun MeshState.jitter(): MeshState = copy(
         transports = transports.map { transport ->
             val state = transport.state
-            if (state is TransportState.Active) {
+            if (state is TransportState.Active && transport.id != TransportId.BT) {
                 transport.copy(
                     state = state.copy(
                         throughputBps = (state.throughputBps * Random.nextDouble(0.7, 1.3)).toLong(),
@@ -85,14 +140,21 @@ class FakeMeshStateRepository @Inject constructor(
             }
         },
         peers = peers.map { peer ->
-            peer.rssiDbm?.let { rssi ->
-                peer.copy(rssiDbm = (rssi + Random.nextInt(-3, 4)).coerceIn(-99, -40))
-            } ?: peer
+            // BLE peers carry real, discovery-sourced RSSI; never jitter them.
+            if (peer.id.startsWith(BLE_PEER_PREFIX)) {
+                peer
+            } else {
+                peer.rssiDbm?.let { rssi ->
+                    peer.copy(rssiDbm = (rssi + Random.nextInt(-3, 4)).coerceIn(-99, -40))
+                } ?: peer
+            }
         },
     )
 
     private companion object {
         const val RELAY_DETAIL = "relay.mesh.example:443 · stores nothing"
+        const val BLE_PEER_PREFIX = "ble-"
+        const val DEFAULT_JITTER_INTERVAL_MILLIS = 2_000L
 
         fun seed() = MeshState(
             transports = listOf(
@@ -104,9 +166,10 @@ class FakeMeshStateRepository @Inject constructor(
                 ),
                 TransportStatus(
                     id = TransportId.BT,
-                    state = TransportState.Active(peers = 1, throughputBps = 12_000),
-                    detail = "BLE mesh · 4 hops max",
-                    constraints = Constraints(maxPayloadBytes = 20_480, typicalLatencyMs = 180),
+                    // Placeholder until the first discovery emission overlays real state.
+                    state = TransportState.Idle,
+                    detail = "Ready to scan",
+                    constraints = BleTransportDefaults.CONSTRAINTS,
                 ),
                 TransportStatus(
                     id = TransportId.LORA,
@@ -126,26 +189,20 @@ class FakeMeshStateRepository @Inject constructor(
                 ),
             ),
             peers = listOf(
+                // Ari is Wi-Fi only now: the fake BT reachability was removed, since
+                // BT peers must come from real discovery, not a seed.
                 Peer(
                     id = "peer-1",
                     displayName = "Ari",
                     fingerprint = listOf("anchor", "drift", "lantern", "nine"),
                     verified = true,
-                    reachableVia = setOf(TransportId.WIFI, TransportId.BT),
+                    reachableVia = setOf(TransportId.WIFI),
                     rssiDbm = -54,
                     hops = 1,
                     lastSeenMinutes = 0,
                 ),
-                Peer(
-                    id = "peer-2",
-                    displayName = "Basecamp",
-                    fingerprint = listOf("beacon", "quartz", "tide", "seven"),
-                    verified = true,
-                    reachableVia = setOf(TransportId.BT),
-                    rssiDbm = -78,
-                    hops = 2,
-                    lastSeenMinutes = 1,
-                ),
+                // The seeded BT-only "Basecamp" peer was removed to avoid showing a
+                // peer that no radio has actually discovered.
                 Peer(
                     id = "peer-3",
                     displayName = "unknown",
