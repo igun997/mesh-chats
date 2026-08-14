@@ -114,12 +114,14 @@ Manifest:
 <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
 <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+<uses-permission
+    android:name="android.permission.BLUETOOTH_SCAN"
+    android:usesPermissionFlags="neverForLocation" />
 <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
 <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 ```
 
-Do not set `neverForLocation`: Android documents that it can filter some BLE beacons, which conflicts with arbitrary mesh-node discovery.
+Set `neverForLocation`: this app reads only its custom service-data beacon and does not derive physical location. RF testing on Samsung Android 13 showed its Bluetooth stack suppresses every scan callback without this assertion, even when Nearby devices is granted.
 
 **Step 4: Run tests/lint and commit**
 

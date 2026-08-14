@@ -23,12 +23,12 @@
         android:maxSdkVersion="30" />
 
     <!-- Granular Bluetooth runtime permissions for API 31+ (Android 12+).
-         BLUETOOTH_SCAN intentionally omits usesPermissionFlags="neverForLocation":
-         that flag lets the platform filter out location-bearing BLE beacons, which
-         is unacceptable for mesh-node discovery where we must observe every nearby
-         advertiser. The tradeoff is that we forgo the neverForLocation assertion;
-         this slice does not infer physical location from scan results. -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+         Mesh discovery reads only this app's custom service-data beacon and never
+         derives physical location. Some vendor stacks suppress all scan callbacks
+         unless this assertion is present, even after Nearby devices is granted. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
