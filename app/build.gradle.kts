@@ -69,6 +69,9 @@ room {
 }
 
 dependencies {
+    // Shared pure-JVM mesh protocol (routing types + packet codec)
+    implementation(project(":mesh-protocol"))
+
     // Compose BOM keeps all compose artifacts on one version
     implementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(platform(libs.androidx.compose.bom))

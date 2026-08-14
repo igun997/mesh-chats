@@ -1,4 +1,4 @@
-package com.meshchats.app.core.routing
+package com.meshchats.protocol.routing
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -1,6 +1,5 @@
-package com.meshchats.app.core.routing
+package com.meshchats.protocol.routing
 
-import com.meshchats.app.core.mesh.TransportId
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

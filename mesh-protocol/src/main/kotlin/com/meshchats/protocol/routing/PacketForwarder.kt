@@ -1,6 +1,5 @@
-package com.meshchats.app.core.routing
+package com.meshchats.protocol.routing
 
-import com.meshchats.app.core.mesh.TransportId
 
 /** Sends an opaque packet to one next hop over a specific transport. */
 fun interface LinkSender {

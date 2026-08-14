@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "mesh-chats"
 include(":app")
+include(":mesh-protocol")

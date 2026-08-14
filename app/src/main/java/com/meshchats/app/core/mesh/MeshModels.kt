@@ -1,12 +1,14 @@
 package com.meshchats.app.core.mesh
 
-/** Radios/paths a frame can travel over. Order is UI display order. */
-enum class TransportId(val label: String, val shortLabel: String) {
-    WIFI("Wi-Fi Aware / Direct", "WIFI"),
-    BT("Bluetooth LE mesh", "BT"),
-    LORA("LoRa radio", "LORA"),
-    RELAY("Relay (global)", "RELAY"),
-}
+/**
+ * Radios/paths a frame can travel over.
+ *
+ * Canonical definition lives in the shared `:mesh-protocol` module so the app
+ * and a future relay agree on transports. This typealias keeps the historical
+ * `com.meshchats.app.core.mesh.TransportId` name (and its members `.label` /
+ * `.shortLabel` / `.WIFI` ...) stable for the UI, avoiding churn across screens.
+ */
+typealias TransportId = com.meshchats.protocol.routing.TransportId
 
 sealed interface TransportState {
     /** Radio exists but is switched off by the user. */

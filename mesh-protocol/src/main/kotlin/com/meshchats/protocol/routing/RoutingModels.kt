@@ -1,6 +1,5 @@
-package com.meshchats.app.core.routing
+package com.meshchats.protocol.routing
 
-import com.meshchats.app.core.mesh.TransportId
 
 /**
  * Platform-free routing domain for the hybrid multi-transport mesh tracer.
@@ -19,18 +18,27 @@ value class NodeId(val value: String)
 value class PacketId(val value: String)
 
 /** What a packet carries, which drives payload-aware route selection. */
-enum class PacketKind {
+enum class PacketKind(val wireCode: Int) {
     /** Small control frames: route requests/replies, acks. */
-    CONTROL,
+    CONTROL(0),
 
     /** Human text messages. Prefer reliable, low-energy paths. */
-    TEXT,
+    TEXT(1),
 
     /** Large payloads/attachments. Prefer Wi-Fi bandwidth. */
-    BULK,
+    BULK(2),
 
     /** Emergency traffic. Duplicated across independent routes. */
-    SOS,
+    SOS(3);
+
+    companion object {
+        /**
+         * The kind for a stable on-wire [wireCode], or null if unknown. Wire
+         * codes are explicit and independent of declaration order so reordering
+         * the enum can never silently change the protocol.
+         */
+        fun fromWireCode(code: Int): PacketKind? = entries.firstOrNull { it.wireCode == code }
+    }
 }
 
 /**
@@ -183,17 +191,25 @@ data class MeshRoute(
 class MeshPacket private constructor(
     val packetId: PacketId,
     val kind: PacketKind,
+    val protocolVersion: Int,
     private val destinationTagBytes: ByteArray,
     val expiresAtMillis: Long,
     val hopsRemaining: Int,
     private val ciphertextBytes: ByteArray,
     private val originSignatureBytes: ByteArray,
+    private val originKeyIdBytes: ByteArray,
     val maxCiphertextBytes: Int,
 ) {
     /** Defensive copy so callers cannot mutate internal state. */
     val ciphertext: ByteArray get() = ciphertextBytes.copyOf()
     val destinationTag: ByteArray get() = destinationTagBytes.copyOf()
     val originSignature: ByteArray get() = originSignatureBytes.copyOf()
+
+    /**
+     * Blinded 16-byte identifier of the origin's signing key. Defensively
+     * copied so a relay cannot mutate the stored bytes.
+     */
+    val originKeyId: ByteArray get() = originKeyIdBytes.copyOf()
 
     val sizeBytes: Int get() = ciphertextBytes.size
 
@@ -206,11 +222,13 @@ class MeshPacket private constructor(
     fun withHopsRemaining(hopsRemaining: Int): MeshPacket = MeshPacket(
         packetId = packetId,
         kind = kind,
+        protocolVersion = protocolVersion,
         destinationTagBytes = destinationTagBytes.copyOf(),
         expiresAtMillis = expiresAtMillis,
         hopsRemaining = hopsRemaining,
         ciphertextBytes = ciphertextBytes.copyOf(),
         originSignatureBytes = originSignatureBytes.copyOf(),
+        originKeyIdBytes = originKeyIdBytes.copyOf(),
         maxCiphertextBytes = maxCiphertextBytes,
     )
 
@@ -226,6 +244,12 @@ class MeshPacket private constructor(
         /** Hard ceiling on ciphertext size to bound relay memory: 1 MiB. */
         const val MAX_CIPHERTEXT_BYTES: Int = 1 shl 20
 
+        /** Fixed width of the blinded origin key id, in bytes. */
+        const val ORIGIN_KEY_ID_BYTES: Int = 16
+
+        /** Current wire protocol version stamped on new packets. */
+        const val CURRENT_PROTOCOL_VERSION: Int = 1
+
         fun create(
             packetId: PacketId,
             kind: PacketKind,
@@ -234,6 +258,8 @@ class MeshPacket private constructor(
             hopsRemaining: Int,
             ciphertext: ByteArray,
             originSignature: ByteArray,
+            originKeyId: ByteArray = ByteArray(ORIGIN_KEY_ID_BYTES),
+            protocolVersion: Int = CURRENT_PROTOCOL_VERSION,
             maxCiphertextBytes: Int = MAX_CIPHERTEXT_BYTES,
         ): MeshPacket {
             require(hopsRemaining >= 0) { "hopsRemaining must be non-negative" }
@@ -244,11 +270,13 @@ class MeshPacket private constructor(
             return MeshPacket(
                 packetId = packetId,
                 kind = kind,
+                protocolVersion = protocolVersion,
                 destinationTagBytes = destinationTag.copyOf(),
                 expiresAtMillis = expiresAtMillis,
                 hopsRemaining = hopsRemaining,
                 ciphertextBytes = ciphertext.copyOf(),
                 originSignatureBytes = originSignature.copyOf(),
+                originKeyIdBytes = originKeyId.copyOf(),
                 maxCiphertextBytes = maxCiphertextBytes,
             )
         }

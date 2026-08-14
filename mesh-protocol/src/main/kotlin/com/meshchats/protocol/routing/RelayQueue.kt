@@ -1,4 +1,4 @@
-package com.meshchats.app.core.routing
+package com.meshchats.protocol.routing
 
 /** Why the queue refused a packet. */
 enum class QueueRejection {
