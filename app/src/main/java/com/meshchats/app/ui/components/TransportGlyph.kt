@@ -27,8 +27,12 @@ import com.meshchats.app.core.mesh.TransportStatus
 import com.meshchats.app.ui.theme.LocalMeshTokens
 
 /**
- * Transport state without color: filled glyph = carrying traffic, outlined = on
- * but idle, struck through = off or hardware absent.
+ * Transport state without color, using shape and weight rather than hue:
+ * - **Active** (carrying traffic): filled glyph in white [glyphActive].
+ * - **Idle / on / scanning**: outlined glyph, also white [glyphActive] — an
+ *   enabled radio reads as present, the fill (not the tint) is what marks
+ *   whether it is actually carrying traffic.
+ * - **Off / Absent**: outlined glyph struck through in the dim [glyphOff].
  */
 @Composable
 fun TransportGlyph(
@@ -39,11 +43,8 @@ fun TransportGlyph(
     val tokens = LocalMeshTokens.current
     val filled = status.isCarrying
     val struck = status.state is TransportState.Off || status.state is TransportState.Absent
-    val tint = when {
-        filled -> tokens.glyphActive
-        struck -> tokens.glyphOff
-        else -> tokens.glyphIdle
-    }
+    // On (filled or idle/scanning) is white; only off/absent dims and strikes.
+    val tint = if (struck) tokens.glyphOff else tokens.glyphActive
 
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(

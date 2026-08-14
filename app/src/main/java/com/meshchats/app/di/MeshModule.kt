@@ -8,6 +8,8 @@ import com.meshchats.app.core.transport.ble.AndroidBleRadio
 import com.meshchats.app.core.transport.ble.BleBeacon
 import com.meshchats.app.core.transport.ble.BleCapability
 import com.meshchats.app.core.transport.ble.BleDiscoveryController
+import com.meshchats.app.core.transport.ble.BleDiscoverySettings
+import com.meshchats.app.core.transport.ble.DataStoreBleDiscoverySettings
 import com.meshchats.app.core.transport.ble.BleRadio
 import com.meshchats.app.core.transport.ble.DefaultBleDiscoveryController
 import com.meshchats.app.core.transport.ble.DiscoveredBlePeerRegistry
@@ -94,4 +96,15 @@ abstract class MeshModule {
     @Binds
     @Singleton
     abstract fun bindMeshStateRepository(impl: HybridMeshStateRepository): MeshStateRepository
+
+    /**
+     * The user's persisted BLE-discovery intent, backed by the shared DataStore.
+     * Both the ViewModel (lifecycle gating) and the repository (honest disabled
+     * state) read the same singleton so intent has a single source of truth.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindBleDiscoverySettings(
+        impl: DataStoreBleDiscoverySettings,
+    ): BleDiscoverySettings
 }

@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.meshchats.app.core.mesh.MeshState
 import com.meshchats.app.core.mesh.Peer
 import com.meshchats.app.core.mesh.TransportId
+import com.meshchats.app.core.transport.ble.BleDiscoveryPreference
 import com.meshchats.app.core.transport.ble.BleDiscoveryState
 import com.meshchats.app.ui.components.MeshRadioCard
 import com.meshchats.app.ui.components.PeerMonogram
@@ -55,6 +56,7 @@ import com.meshchats.app.ui.theme.TabularTextStyle
 fun MeshScreen(viewModel: MeshViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val discovery by viewModel.discovery.collectAsStateWithLifecycle()
+    val bleDiscovery by viewModel.bleDiscovery.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // Discovery runs only while this screen is at least STARTED. Tied to the
@@ -100,8 +102,10 @@ fun MeshScreen(viewModel: MeshViewModel = hiltViewModel()) {
     MeshContent(
         state = state,
         discovery = discovery,
+        bleDiscovery = bleDiscovery,
         permissionDenied = permissionDenied,
         onToggleTransport = viewModel::toggleTransport,
+        onToggleBleDiscovery = viewModel::setBleDiscoveryEnabled,
         onLocalMeshOnly = viewModel::setLocalMeshOnly,
         onGrantPermissions = { permissions ->
             permissionLauncher.launch(permissions.toTypedArray())
@@ -125,8 +129,10 @@ fun MeshScreen(viewModel: MeshViewModel = hiltViewModel()) {
 private fun MeshContent(
     state: MeshState,
     discovery: BleDiscoveryState,
+    bleDiscovery: BleDiscoveryPreference,
     permissionDenied: Boolean,
     onToggleTransport: (TransportId, Boolean) -> Unit,
+    onToggleBleDiscovery: (Boolean) -> Unit,
     onLocalMeshOnly: (Boolean) -> Unit,
     onGrantPermissions: (Set<String>) -> Unit,
     onOpenAppSettings: () -> Unit,
@@ -152,19 +158,35 @@ private fun MeshContent(
             }
 
             items(state.transports, key = { it.id }) { status ->
-                // The Bluetooth card is driven entirely by the discovery
-                // lifecycle, so it never shows a misleading manual toggle. All
-                // other transports keep their switch.
-                val hideToggle = status.id == TransportId.BT
+                val isBt = status.id == TransportId.BT
                 MeshRadioCard(
                     status = status,
-                    onToggle = { enabled -> onToggleTransport(status.id, enabled) },
+                    // Bluetooth routes to the persisted discovery intent; every
+                    // other transport keeps its existing per-transport toggle.
+                    onToggle = { enabled ->
+                        if (isBt) onToggleBleDiscovery(enabled) else onToggleTransport(status.id, enabled)
+                    },
                     onAttach = {},
-                    showToggle = !hideToggle,
+                    // The BT switch mirrors the user's saved intent, so it stays
+                    // ON even when the row reads Off (e.g. Bluetooth turned off in
+                    // system settings) and the user has not opted out. While the
+                    // stored value is still loading we keep showing the safe OFF
+                    // but disable the switch (below) so it doesn't read as an
+                    // actionable off-state before the real intent arrives.
+                    checkedOverride = if (isBt) bleDiscovery.enabled else null,
+                    // Bluetooth's switch is only actionable once the persisted
+                    // intent has loaded; until then it's disabled so the cold
+                    // OFF can't be mistaken for a user choice or toggled against.
+                    toggleEnabled = if (isBt) bleDiscovery.loaded else true,
+                    toggleContentDescription = if (isBt) "Bluetooth discovery" else null,
                     modifier = Modifier.padding(horizontal = MeshSpec.screenPadding),
                 )
 
-                if (status.id == TransportId.BT) {
+                // The permission/settings/off prompts only make sense while the
+                // user actually wants BLE discovery. When the toggle is OFF we
+                // hide them entirely so a disabled switch never nags for
+                // permissions or points at system settings.
+                if (isBt && bleDiscovery.loaded && bleDiscovery.enabled) {
                     DiscoveryAction(
                         discovery = discovery,
                         permissionDenied = permissionDenied,
@@ -410,8 +432,10 @@ private fun MeshPreview() {
             discovery = BleDiscoveryState.PermissionRequired(
                 setOf(android.Manifest.permission.BLUETOOTH_SCAN),
             ),
+            bleDiscovery = BleDiscoveryPreference(loaded = true, enabled = true),
             permissionDenied = false,
             onToggleTransport = { _, _ -> },
+            onToggleBleDiscovery = {},
             onLocalMeshOnly = {},
             onGrantPermissions = {},
             onOpenAppSettings = {},

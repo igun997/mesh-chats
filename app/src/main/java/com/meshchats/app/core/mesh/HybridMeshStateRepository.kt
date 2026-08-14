@@ -1,6 +1,8 @@
 package com.meshchats.app.core.mesh
 
 import com.meshchats.app.core.transport.ble.BleDiscoveryController
+import com.meshchats.app.core.transport.ble.BleDiscoveryPreference
+import com.meshchats.app.core.transport.ble.BleDiscoverySettings
 import com.meshchats.app.core.transport.ble.BleDiscoveryState
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -41,6 +44,7 @@ import kotlinx.coroutines.launch
 class HybridMeshStateRepository(
     scope: CoroutineScope,
     private val bleController: BleDiscoveryController,
+    private val settings: BleDiscoverySettings,
     // Exposed so tests can disable the still-fake jitter loop with
     // Long.MAX_VALUE; production uses the [DEFAULT_JITTER_INTERVAL_MILLIS]
     // secondary constructor below.
@@ -51,16 +55,20 @@ class HybridMeshStateRepository(
     constructor(
         scope: CoroutineScope,
         bleController: BleDiscoveryController,
-    ) : this(scope, bleController, DEFAULT_JITTER_INTERVAL_MILLIS)
+        settings: BleDiscoverySettings,
+    ) : this(scope, bleController, settings, DEFAULT_JITTER_INTERVAL_MILLIS)
 
     private val _state = MutableStateFlow(seed())
     override val state: StateFlow<MeshState> = _state.asStateFlow()
 
     init {
-        // Overlay real BLE status + peers onto the fake baseline on every emission.
+        // Overlay BLE status + peers onto the fake baseline on every emission,
+        // gated by the user's persisted intent: while the preference is loading
+        // or disabled the Bluetooth row is honestly Off and BLE peers vanish, so
+        // the UI never shows scanning the user has switched off.
         scope.launch {
-            bleController.state.collect { discovery ->
-                _state.update { current -> current.withBle(discovery) }
+            combine(bleController.state, settings.state, ::Pair).collect { (discovery, pref) ->
+                _state.update { current -> current.withBle(discovery, pref) }
             }
         }
         if (jitterIntervalMillis != Long.MAX_VALUE) {
@@ -114,11 +122,30 @@ class HybridMeshStateRepository(
         }
     }
 
-    /** Replace the BT transport row and BLE peers with the mapped discovery state. */
-    private fun MeshState.withBle(discovery: BleDiscoveryState): MeshState {
+    /**
+     * Replace the BT transport row and BLE peers with the mapped discovery state,
+     * unless the user's [preference] withholds it. While loading we do not yet
+     * know intent, and while disabled the user has opted out — either way BT is
+     * shown Off and every BLE-only peer is dropped, while non-BLE fake routes are
+     * preserved. When enabled the row and peers are fully discovery-derived.
+     */
+    private fun MeshState.withBle(
+        discovery: BleDiscoveryState,
+        preference: BleDiscoveryPreference,
+    ): MeshState {
         val btConstraints = transport(TransportId.BT)?.constraints ?: BleTransportDefaults.CONSTRAINTS
-        val btStatus = BleMeshStateMapper.toTransportStatus(discovery, btConstraints)
-        val blePeers = BleMeshStateMapper.toPeers(discovery)
+        val (btStatus, blePeers) = if (preference.loaded && preference.enabled) {
+            BleMeshStateMapper.toTransportStatus(discovery, btConstraints) to
+                BleMeshStateMapper.toPeers(discovery)
+        } else {
+            val detail = if (preference.loaded) DISABLED_DETAIL else LOADING_DETAIL
+            TransportStatus(
+                id = TransportId.BT,
+                state = TransportState.Off,
+                detail = detail,
+                constraints = btConstraints,
+            ) to emptyList()
+        }
         return copy(
             transports = transports.map { if (it.id == TransportId.BT) btStatus else it },
             // Non-BLE fake peers stay; BLE peers are entirely discovery-driven.
@@ -153,6 +180,8 @@ class HybridMeshStateRepository(
 
     private companion object {
         const val RELAY_DETAIL = "relay.mesh.example:443 · stores nothing"
+        const val DISABLED_DETAIL = "Disabled in Mesh Chats"
+        const val LOADING_DETAIL = "Loading preference"
         const val BLE_PEER_PREFIX = "ble-"
         const val DEFAULT_JITTER_INTERVAL_MILLIS = 2_000L
 

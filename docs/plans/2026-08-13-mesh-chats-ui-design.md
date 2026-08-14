@@ -71,7 +71,7 @@ hairline = onSurface @14%, 1dp
 ```
 Screen title           WiFi  BT  LoRa  RELAY  4 peers
 ```
-Solid glyph = actively carrying traffic, outline = radio on but no peer, struck = off or absent (LoRa struck when no hardware attached). Tap → Mesh tab. This is the always-on trust indicator without spending a second header row.
+Solid white glyph = actively carrying traffic, white outline = radio on but no peer (idle or scanning), dim struck = off or absent (LoRa struck when no hardware attached). On vs off is the tint (white vs dim); carrying vs idle is the fill. Tap → Mesh tab. This is the always-on trust indicator without spending a second header row.
 
 **Insets contract (one rule, no per-screen guessing):**
 - `enableEdgeToEdge()`; `Scaffold` consumes system bars.
@@ -113,6 +113,8 @@ LoRa   No device attached       absent   attach USB/BLE radio   [attach]
 RLY    Relay · vpn.example:443  global   E2E · stores nothing   [toggle]
 ```
 Attached LoRa reads `RAK4631 · USB · 868MHz · SF7 · duty 1.2%` with a duty-cycle bar, because regional duty limits actually throttle sending.
+
+Every transport row, **including Bluetooth**, carries a normal switch. The Bluetooth switch persists the user's discovery intent (DataStore) rather than toggling the system radio: OFF stops advertising/scanning and survives restart, and the row honestly reads Off with BLE peers cleared; ON resumes foreground-only scanning while the Mesh screen is visible. While OFF the permission/Bluetooth-off prompt cards are hidden, so a disabled switch never nags for permissions.
 
 **List / Graph toggle.** Graph = mono topology: nodes are fingerprint monograms; edges are hairlines style-coded by transport (solid Wi-Fi, dotted BT, dashed LoRa, double-line relay) with opacity = link quality. Rendered from real neighbour tables.
 

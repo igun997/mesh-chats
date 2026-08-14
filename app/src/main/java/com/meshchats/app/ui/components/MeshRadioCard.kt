@@ -40,9 +40,21 @@ fun MeshRadioCard(
     onToggle: (Boolean) -> Unit,
     onAttach: () -> Unit,
     modifier: Modifier = Modifier,
-    // Some transports (Bluetooth) are driven by a lifecycle/status action
-    // elsewhere, so they hide the manual switch rather than show a misleading one.
     showToggle: Boolean = true,
+    // Bluetooth's switch reflects the user's *persisted intent*, not the derived
+    // transport status: the row can read Off (Bluetooth disabled, permission
+    // missing) while the user still wants BLE on. Pass the intent here so the
+    // switch stays checked; null falls back to the derived availability.
+    checkedOverride: Boolean? = null,
+    // Gates whether the switch is actionable. Bluetooth passes its persisted
+    // intent's `loaded` flag: while the stored value is still unknown the switch
+    // is disabled so a transient OFF never reads as an actionable off-state the
+    // user could accidentally toggle against.
+    toggleEnabled: Boolean = true,
+    // Overrides the switch's accessibility label. Bluetooth passes
+    // "Bluetooth discovery" since it routes to the discovery intent rather than
+    // the raw transport; other transports keep their transport label.
+    toggleContentDescription: String? = null,
 ) {
     val tokens = LocalMeshTokens.current
     val shape = RoundedCornerShape(12.dp)
@@ -80,10 +92,13 @@ fun MeshRadioCard(
             TextButton(onClick = onAttach) { Text("Attach") }
         } else if (!absent && showToggle) {
             Switch(
-                checked = status.isAvailable,
+                checked = checkedOverride ?: status.isAvailable,
                 onCheckedChange = onToggle,
+                enabled = toggleEnabled,
                 modifier = Modifier.semantics {
-                    contentDescription = "${status.id.label} enabled"
+                    // Label only: the Switch role already announces on/off, so
+                    // appending "enabled" would contradict the off state.
+                    contentDescription = toggleContentDescription ?: status.id.label
                 },
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colorScheme.onSurface,
