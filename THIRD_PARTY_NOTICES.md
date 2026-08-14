@@ -2,15 +2,36 @@
 
 mesh-chats is licensed under the GNU Affero General Public License v3.0
 (see `LICENSE`). This file records third-party components the project depends
-on, and cryptographic components planned for future vendoring.
+on.
 
-## Planned (not yet vendored)
+## Cryptographic components
 
-- **libsignal** (Signal Messenger, LLC) — the Signal protocol library intended
-  for end-to-end encryption of mesh payloads. It is **not yet vendored or
-  depended on** by this repository. When it is introduced, its license
-  (AGPL-3.0) and attribution will be recorded here and its source made
-  available per that license.
+The end-to-end encryption and encrypted-storage foundation depends on the
+following components. Versions are pinned in `gradle/libs.versions.toml`.
+
+- **libsignal** (Signal Messenger, LLC) — the Signal protocol library used for
+  end-to-end encryption of mesh payloads. Consumed as the pinned artifacts
+  `org.signal:libsignal-android:0.100.0` (Android native libraries) and
+  `org.signal:libsignal-client:0.100.0` (Java protocol classes), both at the
+  identical version. Licensed under the **AGPL-3.0**. These artifacts are
+  published in Signal's official Maven repository
+  (`https://build-artifacts.signal.org/libraries/maven/`), not Maven Central.
+  Source: https://github.com/signalapp/libsignal (tag `v0.100.0`).
+
+- **SQLCipher for Android** (Zetetic, LLC) — transparent 256-bit AES
+  encryption for the Room/SQLite database. Consumed as
+  `net.zetetic:sqlcipher-android:4.17.0`. Licensed under a **BSD-style
+  license**. Source: https://github.com/sqlcipher/sqlcipher-android.
+
+- **Bouncy Castle** (The Legion of the Bouncy Castle Inc.) — provider used for
+  isolated Ed25519 key generation and signing. Consumed as
+  `org.bouncycastle:bcprov-jdk18on:1.85.2`. Licensed under the **MIT-style
+  Bouncy Castle license**. Source: https://github.com/bcgit/bc-java.
+
+- **Android core library desugaring** (Google) — `com.android.tools:desugar_jdk_libs:2.1.5`,
+  required by libsignal-android to backport `java.time`/`java.nio` APIs to the
+  project's `minSdk`. Licensed under the **GNU GPL v2 with Classpath
+  Exception**. Source: https://github.com/google/desugar_jdk_libs.
 
 ## Current dependencies
 

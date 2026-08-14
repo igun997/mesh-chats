@@ -32,6 +32,15 @@ coroutines = "1.11.0"
 serialization = "1.11.0"
 ktor = "3.5.2"
 
+# Cryptography (encrypted identity + storage foundation)
+# libsignal is published only in Signal's official Maven repo, not Central; both
+# artifacts are pinned to the identical version. libsignal-android carries the
+# Android native libraries and transitively depends on libsignal-client 0.100.0.
+libsignal = "0.100.0"
+sqlcipher = "4.17.0"
+bouncycastle = "1.85.2"
+desugarJdkLibs = "2.1.5"
+
 # UI kits
 coil = "3.5.0"
 lottie = "6.7.1"
@@ -89,6 +98,13 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
+
+# --- Cryptography (encrypted identity + storage) ---
+libsignal-android = { group = "org.signal", name = "libsignal-android", version.ref = "libsignal" }
+libsignal-client = { group = "org.signal", name = "libsignal-client", version.ref = "libsignal" }
+sqlcipher-android = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
+bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 
 # --- Kotlin ecosystem ---
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
