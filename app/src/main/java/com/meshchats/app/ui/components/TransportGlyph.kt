@@ -76,7 +76,7 @@ private fun TransportId.icon(filled: Boolean): ImageVector = when (this) {
     TransportId.RELAY -> if (filled) Icons.Filled.Public else Icons.Outlined.Public
 }
 
-/** Spoken description used by the merged transport strip node. */
+/** Spoken description used by the merged transport header-status node. */
 fun TransportStatus.spokenState(): String = when (val state = state) {
     is TransportState.Active -> {
         val noun = if (state.peers == 1) "peer" else "peers"

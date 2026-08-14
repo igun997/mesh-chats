@@ -66,12 +66,12 @@ hairline = onSurface @14%, 1dp
 
 **SOS dock** is the only inverted element in the product: 64dp circle, full inverse fill, floating 12dp above the nav bar with `navigationBarsPadding()` so it clears the gesture pill. Hold-to-arm draws a 3dp progress ring. Nothing else uses 100%-on-0% inversion, so it always reads as the emergency control without a single red pixel.
 
-**Transport strip:** 28dp row under each screen's top bar, on every tab.
+**Transport header status:** compact cluster in each screen's top-app-bar action slot.
 
 ```
-WiFi   BT   LoRa   RELAY        4 peers
+Screen title           WiFi  BT  LoRa  RELAY  4 peers
 ```
-Solid glyph = actively carrying traffic, outline = radio on but no peer, struck = off or absent (LoRa struck when no hardware attached). Tap → Mesh tab. This is the always-on trust indicator.
+Solid glyph = actively carrying traffic, outline = radio on but no peer, struck = off or absent (LoRa struck when no hardware attached). Tap → Mesh tab. This is the always-on trust indicator without spending a second header row.
 
 **Insets contract (one rule, no per-screen guessing):**
 - `enableEdgeToEdge()`; `Scaffold` consumes system bars.
@@ -222,11 +222,11 @@ interface Transport {
 
 `constraints.maxPayload` drives the composer's byte counter — no hardcoded 200.
 
-**Components first** (each with Day / Night / edge-case previews): `TransportStrip`, `SosDock`, `PeerMonogram`, `MessageBubble` + `DeliveryGlyph`, `MeshRadioCard`, `HairlineDivider`, `MonoKeypad`, `HoldToConfirmButton`.
+**Components first** (each with Day / Night / edge-case previews): `TransportHeaderStatus`, `SosDock`, `PeerMonogram`, `MessageBubble` + `DeliveryGlyph`, `MeshRadioCard`, `HairlineDivider`, `MonoKeypad`, `HoldToConfirmButton`.
 
 **Navigation.** Nested graph per tab with its own back stack, `@Serializable` routes. SOS countdown/active are top-level overlay destinations so they render above any tab.
 
-**State.** Per screen: immutable `UiState` + sealed `Intent`, `StateFlow` from the ViewModel, one-shot effects via `Channel`. The transport strip reads a shared `MeshStateRepository` through `derivedStateOf` so RSSI ticks don't recompose chat lists.
+**State.** Per screen: immutable `UiState` + sealed `Intent`, `StateFlow` from the ViewModel, one-shot effects via `Channel`. The transport header status reads a shared `MeshStateRepository` through `derivedStateOf` so RSSI ticks don't recompose chat lists.
 
 **Map.** `AndroidView` + MapLibre `MapView` bound to lifecycle; styles at `assets/styles/mono-day.json` and `mono-night.json`.
 
@@ -235,9 +235,9 @@ interface Transport {
 ## 11. Accessibility
 
 - Every state carries two cues: fill + label, fill + underline, or glyph + strike. Never fill alone.
-- TalkBack: transport strip is one merged node (`Mesh: Wi-Fi active, Bluetooth active, LoRa not attached, relay off, 4 peers`). SOS dock is a button (`SOS, hold to arm`) with a custom `Arm SOS` action so holding is never mandatory.
+- TalkBack: transport header status is one merged button (`Mesh: Wi-Fi active, Bluetooth active, LoRa not attached, relay off, 4 peers. Open mesh`). SOS dock is a button (`SOS, hold to arm`) with a custom `Arm SOS` action so holding is never mandatory.
 - Targets ≥48dp; SOS 64dp with 12dp edge exclusion.
-- `fontScale 2.0` is a supported layout — chat rows, transport strip, SOS countdown all verified at 200%.
+- `fontScale 2.0` is a supported layout — chat rows, transport header status, SOS countdown all verified at 200%.
 - Reduce-motion: SOS pulse becomes static max contrast; crossfades become instant.
 - Full RTL mirroring, including bubble alignment and radar bearings.
 
@@ -259,7 +259,7 @@ interface Transport {
 ## 14. Next steps
 
 1. Strip dynamic color, add `MeshTokens`, build the component library with previews.
-2. Build the shell: 4 tabs + SOS dock + transport strip + insets contract, wired to fake `MeshState`.
+2. Build the shell: 4 tabs + SOS dock + compact transport header status + insets contract, wired to fake `MeshState`.
 3. Chats and chat screens against a fake `Transport` (constraint-driven composer).
 4. Mesh tab with real Wi-Fi/BLE transports; LoRa and relay behind the same interface.
 5. Map with mono style + offline regions + radar fallback.

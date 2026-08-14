@@ -5,8 +5,8 @@ import com.meshchats.app.core.transport.ble.DiscoveredBlePeer
 
 /**
  * Pure translation from BLE discovery vocabulary ([BleDiscoveryState]) into the
- * UI vocabulary the transport strip and mesh tab already read ([TransportStatus]
- * and [Peer]). Kept free of radios, time, and randomness so every mapping is
+ * UI vocabulary the transport header status and mesh tab already read
+ * ([TransportStatus] and [Peer]). Kept free of radios, time, and randomness so every mapping is
  * asserted directly in tests and the repository can overlay the result onto its
  * remaining fake transports without leaking Android types into the UI layer.
  *

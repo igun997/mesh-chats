@@ -1,8 +1,6 @@
 package com.meshchats.app.ui.shell
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -23,8 +21,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.meshchats.app.core.mesh.MeshState
-import com.meshchats.app.ui.components.HairlineDivider
-import com.meshchats.app.ui.components.TransportStrip
+import com.meshchats.app.ui.components.TransportHeaderStatus
 import com.meshchats.app.ui.theme.MeshSpec
 
 /**
@@ -40,8 +37,8 @@ fun ProvideShellBottomPadding(value: Dp, content: @Composable () -> Unit) {
 }
 
 /**
- * Standard screen frame: top bar, always-on transport strip, and top-inset
- * handling. The shell owns the bottom edge, so this consumes top insets only.
+ * Standard screen frame: title and always-on transport status share one compact
+ * top bar. The shell owns the bottom edge, so this consumes top insets only.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,8 +48,6 @@ fun MeshScreenScaffold(
     onOpenMesh: () -> Unit,
     modifier: Modifier = Modifier,
     navigationIcon: @Composable () -> Unit = {},
-    actions: @Composable RowScope.() -> Unit = {},
-    showTransportStrip: Boolean = true,
     bottomBar: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -60,20 +55,16 @@ fun MeshScreenScaffold(
         modifier = modifier,
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text(title) },
-                    navigationIcon = navigationIcon,
-                    actions = actions,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                    ),
-                )
-                if (showTransportStrip) {
-                    TransportStrip(state = meshState, onClick = onOpenMesh)
-                    HairlineDivider()
-                }
-            }
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = navigationIcon,
+                actions = {
+                    TransportHeaderStatus(state = meshState, onClick = onOpenMesh)
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+            )
         },
         bottomBar = bottomBar,
         content = content,

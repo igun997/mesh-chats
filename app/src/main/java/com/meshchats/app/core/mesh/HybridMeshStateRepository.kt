@@ -34,8 +34,8 @@ import kotlinx.coroutines.launch
  * lifetime.
  *
  * The RSSI/throughput jitter loop is retained for the still-fake transports so the
- * transport strip keeps proving it survives frequent updates without recomposing
- * chat lists; it never touches BLE-derived rows.
+ * transport header status keeps proving it survives frequent updates without
+ * recomposing chat lists; it never touches BLE-derived rows.
  */
 @Singleton
 class HybridMeshStateRepository(

@@ -31,20 +31,11 @@ val LocalMeshTokens = staticCompositionLocalOf<MeshTokens> {
 object MeshSpec {
     val hairlineWidth: Dp = 1.dp
 
-    /** Transport strip height, pinned under every top bar. */
-    val transportStripHeight: Dp = 28.dp
-
     /** SOS dock diameter. Above the 48dp minimum on purpose. */
     val sosDockSize: Dp = 64.dp
 
     /** Dock float above the navigation bar. */
     val sosDockOverhang: Dp = 12.dp
-
-    /** Bottom content padding so list tails clear the docked SOS button. */
-    val listBottomClearance: Dp = 76.dp
-
-    /** Minimum gap between any interactive element and the safe-drawing edge. */
-    val edgeExclusion: Dp = 12.dp
 
     val minTouchTarget: Dp = 48.dp
 
