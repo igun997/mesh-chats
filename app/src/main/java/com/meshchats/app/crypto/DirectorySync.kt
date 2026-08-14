@@ -31,8 +31,11 @@ fun interface DirectorySync {
  *
  * `FileOutputStream(dir)` — the naive approach — cannot work: a directory cannot
  * be opened for writing, so it throws immediately and never actually syncs
- * anything. This implementation opens with `O_RDONLY | O_DIRECTORY` and calls
- * `fsync(2)` on the resulting descriptor, then always closes it. Every failure
+ * anything. This implementation opens the directory read-only with `O_RDONLY`
+ * (the `isDirectory` guard above already ensures the path is a directory, so the
+ * `O_DIRECTORY` flag — which the Android SDK's `OsConstants` does not expose
+ * anyway — is unnecessary) and calls `fsync(2)` on the resulting descriptor,
+ * then always closes it. Every failure
  * (unsupported filesystem, `ErrnoException`, or the stubbed `Os` on a host JVM)
  * is swallowed as documented best-effort behavior.
  */

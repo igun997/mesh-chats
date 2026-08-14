@@ -1,9 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ data-extraction rules (android:dataExtractionRules), covering both
+  cloud backup and device-to-device transfer. Backup is disabled outright via
+  android:allowBackup="false", so these rules are never consulted on any supported
+  OS. They are kept as defense-in-depth: if a future change re-enables backup or
+  transfer, the sensitive stores are already excluded.
+
+  Excluded from both flows: the encrypted Room database (and its plaintext-
+  migration side files), all app files (any wrapped-secret material), and shared
+  preferences / DataStore. Capturing any of these off-device could expose the
+  encrypted database to offline decryption.
+-->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="database" path="mesh-chats.db" />
+        <exclude domain="database" path="mesh-chats.db-wal" />
+        <exclude domain="database" path="mesh-chats.db-shm" />
+        <exclude domain="database" path="mesh-chats.db.enc-tmp" />
+        <exclude domain="database" path="mesh-chats.db.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db-wal.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db-shm.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db.migration" />
+        <exclude domain="file" path="." />
         <exclude domain="sharedpref" path="." />
     </cloud-backup>
     <device-transfer>
+        <exclude domain="database" path="mesh-chats.db" />
+        <exclude domain="database" path="mesh-chats.db-wal" />
+        <exclude domain="database" path="mesh-chats.db-shm" />
+        <exclude domain="database" path="mesh-chats.db.enc-tmp" />
+        <exclude domain="database" path="mesh-chats.db.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db-wal.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db-shm.pt-bak" />
+        <exclude domain="database" path="mesh-chats.db.migration" />
+        <exclude domain="file" path="." />
         <exclude domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>

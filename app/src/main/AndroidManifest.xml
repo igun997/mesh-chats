@@ -32,9 +32,14 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- allowBackup is disabled: this app stores an encrypted database whose key
+         lives in the Android Keystore + noBackupFilesDir. Allowing cloud/adb backup
+         could capture the encrypted database (and, during a plaintext->encrypted
+         migration, a transient plaintext temp) off-device. The backup/extraction
+         XML rules are retained as defense-in-depth should backup ever be re-enabled. -->
     <application
         android:name=".MeshChatsApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
