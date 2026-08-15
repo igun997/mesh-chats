@@ -226,6 +226,16 @@ object DataModule {
             // RESTART_REQUIRED: the wrapping keys are already destroyed above, so data
             // at rest is unrecoverable, but the caller must terminate the process to
             // clear the in-RAM key.
+            //
+            // Provider pre-open concern (accepted low): resolving `database.get()`
+            // here can, in the pathological case where a wipe fires before storage
+            // ever opened, force a fresh open of an already-key-destroyed database.
+            // That open may fail or briefly recreate a file — harmless because the
+            // wrapping keys are gone (data at rest is already unrecoverable) and the
+            // subsequent file deletes plus mandatory process termination remove any
+            // residue. Keeping the Provider (vs. eager DB) is deliberate: it avoids
+            // forcing an expensive disk-touching open at coordinator construction on
+            // every launch, which is the common path; the wipe path is rare.
             closeDatabase = { ProductionDatabaseClose.run { database.get().close() } },
             sensitiveFiles = {
                 buildList {

@@ -16,16 +16,19 @@ enum class SecretWrapError {
 /**
  * A bounded reason unwrapping a wrapped secret failed. These are the failure
  * modes callers must fail closed on: the record was tampered with (AEAD tag
- * mismatch), the non-exportable wrapping key is gone (device credential reset,
- * app data partially cleared), or the store is otherwise unavailable. None of
- * them is recoverable by regenerating the secret when a wrapped file already
- * exists.
+ * mismatch), the non-exportable wrapping key is gone (its Keystore alias was
+ * deleted or the app's Keystore-backed material was lost with its app data), or
+ * the store is otherwise unavailable. None of them is recoverable by
+ * regenerating the secret when a wrapped file already exists.
  */
 enum class SecretUnwrapError {
     /**
      * The wrapping key that produced this record no longer exists in the backing
-     * store (e.g. the user cleared the lock screen credential, which permanently
-     * invalidates Keystore keys). The wrapped secret is unrecoverable.
+     * store. These keys are NOT auth-bound (no `setUserAuthenticationRequired`),
+     * so a lock-screen credential change does not invalidate them; the genuine
+     * loss modes are the alias being deleted (e.g. panic wipe), the app's data
+     * being cleared/uninstalled (Keystore material is scoped to the app), or a
+     * hardware/keystore-corruption event. The wrapped secret is unrecoverable.
      */
     KEY_LOST,
 

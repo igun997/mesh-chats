@@ -28,9 +28,11 @@ class DeviceIdentity(
  */
 enum class DeviceIdentityError {
     /**
-     * The wrapped identity-secret file exists but its wrapping key is gone (device
-     * credential reset, partial data clear). The private key is unrecoverable; the
-     * identity is lost. NEVER regenerate over this.
+     * The wrapped identity-secret file exists but its wrapping key is gone: the
+     * Keystore alias was deleted or the app's Keystore material was lost with its
+     * app data. (The alias is not auth-bound, so a lock-screen credential change
+     * does not cause this.) The private key is unrecoverable; the identity is
+     * lost. NEVER regenerate over this.
      */
     KEY_LOST,
 

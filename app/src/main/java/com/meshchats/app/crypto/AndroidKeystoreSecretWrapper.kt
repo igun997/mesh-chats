@@ -13,8 +13,12 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Classifies an exception thrown while unwrapping a Keystore-wrapped secret into
  * a bounded [SecretUnwrapError]. Extracted from [AndroidKeystoreSecretWrapper] so
- * it can be unit-tested on the host JVM, where a device credential reset (and the
- * `KeyPermanentlyInvalidatedException` it raises) cannot be reproduced.
+ * it can be unit-tested on the host JVM, where the
+ * `KeyPermanentlyInvalidatedException` some Keystore events raise cannot be
+ * reproduced. These aliases are NOT auth-bound (no
+ * `setUserAuthenticationRequired`), so a lock-screen credential change does not
+ * invalidate them; the classifier still maps that exception to KEY_LOST
+ * defensively should any keystore event ever surface it.
  *
  * Classification walks the cause chain (some providers wrap the real cause), and
  * matches by class name — `android.security.keystore.KeyPermanentlyInvalidatedException`
@@ -110,9 +114,12 @@ class AndroidKeystoreSecretWrapper(
             val plaintext = cipher.doFinal(ciphertext)
             UnwrapResult.Success(plaintext)
         } catch (e: Exception) {
-            // A permanently invalidated key (credential reset) surfaces here rather
-            // than as a null lookup, and must be reported as KEY_LOST. Tamper (bad
-            // AEAD tag) and operational failures are classified from the same chain.
+            // A permanently invalidated key surfaces here rather than as a null
+            // lookup, and must be reported as KEY_LOST. These aliases are not
+            // auth-bound, so this is not caused by a lock-screen credential change;
+            // the genuine loss modes are alias deletion or the app's Keystore
+            // material being lost with its app data. Tamper (bad AEAD tag) and
+            // operational failures are classified from the same chain.
             UnwrapResult.Failure(classifyKeystoreUnwrapError(e))
         }
     }
