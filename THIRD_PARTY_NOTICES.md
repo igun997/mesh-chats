@@ -33,6 +33,18 @@ following components. Versions are pinned in `gradle/libs.versions.toml`.
   project's `minSdk`. Licensed under the **GNU GPL v2 with Classpath
   Exception**. Source: https://github.com/google/desugar_jdk_libs.
 
+## Bundled data
+
+- **BIP-39 English word list** — a fixed 2048-word English list bundled as the
+  checked-in resource `app/src/main/resources/com/meshchats/app/crypto/fourword-english.txt`
+  (SHA-256 `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`).
+  It is used **only** to render the short, non-authoritative four-word display
+  of a device fingerprint (see `FourWordFingerprint`); it is not used as a
+  BIP-39 mnemonic and carries no checksum semantics here. The list originates
+  from BIP-39 (Bitcoin Improvement Proposal 39) and its reference word lists,
+  which are released into the **public domain (Creative Commons CC0 1.0)**.
+  Source: https://github.com/bitcoin/bips/tree/master/bip-0039.
+
 ## Current dependencies
 
 The Android application module (`:app`) depends on major third-party libraries

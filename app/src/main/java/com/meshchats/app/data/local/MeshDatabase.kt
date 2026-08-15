@@ -30,6 +30,7 @@ abstract class MeshDatabase : RoomDatabase() {
     abstract fun signalSignedPreKeyDao(): SignalSignedPreKeyDao
     abstract fun signalKyberPreKeyDao(): SignalKyberPreKeyDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun identityProvisioningDao(): IdentityProvisioningDao
 
     companion object {
         const val NAME = "mesh-chats.db"
