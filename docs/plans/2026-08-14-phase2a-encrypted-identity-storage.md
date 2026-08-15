@@ -61,4 +61,16 @@ Extend messages additively with delivery state, packet ID, expiry, route path, f
 
 ### Task 7: Verification
 
-Run protocol, app JVM, instrumentation on Samsung A22, lint, release/R8, install. Review migration crash safety, private-key exposure, logs/backups, native ABI packaging. Commit as `feat: add encrypted identity storage foundation`.
+Run protocol, app JVM, instrumentation on Samsung A22, lint, release/R8, install. Review migration crash safety, private-key exposure, logs/backups, native ABI packaging.
+
+## Completion record
+
+Completed across scoped commits `1c42153` through `232dbdb`, plus startup hardening `00524bf` from the approved startup-gate addendum. Final gate on Samsung A22 (`SM-A225F`, API 33):
+
+- `:mesh-protocol:test`: 98 tests, 0 failures/skips.
+- `:app:testDebugUnitTest`: 354 tests, 0 failures/skips.
+- `:app:connectedDebugAndroidTest`: 67 tests, 0 failures/skips.
+- `:app:lintDebug`: passed.
+- `:app:assembleRelease`: passed with R8/resource shrinking.
+
+Phase 2A is complete. Actual PQXDH/Double Ratchet store adapters, session establishment, and encrypted send/outbox wiring remain Phase 2B/2C.
