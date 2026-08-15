@@ -14,6 +14,7 @@ import com.meshchats.app.crypto.AtomicSecretFile
 import com.meshchats.app.crypto.DatabaseKeyProvider
 import com.meshchats.app.data.local.EncryptedDatabaseOpener
 import com.meshchats.app.data.local.MeshDatabase
+import com.meshchats.app.data.local.MIGRATION_1_2
 import com.meshchats.app.data.local.MessageDao
 import dagger.Module
 import dagger.Provides
@@ -66,9 +67,12 @@ object DataModule {
             // of any legacy plaintext database happens inside createFactory(), before
             // Room touches the file.
             .openHelperFactory(opener.createFactory())
-            // Never destroy data on an unexpected schema state. Downgrades and missing
-            // migrations must surface loudly rather than silently dropping user data;
-            // explicit migrations are added as the schema evolves (Task 4).
+            // Explicit, non-destructive schema upgrade. MIGRATION_1_2 creates the
+            // Signal, identity, and outbox tables and extends messages additively.
+            .addMigrations(MIGRATION_1_2)
+            // Never destroy data on an unexpected schema state. No fallback destructive
+            // migration/downgrade: a missing migration or downgrade must surface loudly
+            // rather than silently dropping user data.
             .build()
     }
 

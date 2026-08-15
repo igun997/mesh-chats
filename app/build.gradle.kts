@@ -82,6 +82,13 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    // MigrationTestHelper reads exported schema JSON from androidTest assets.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
 }
 
 kotlin {
@@ -160,6 +167,7 @@ dependencies {
 
     // Instrumented tests
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.hilt.android.testing)

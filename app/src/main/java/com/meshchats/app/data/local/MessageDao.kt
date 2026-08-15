@@ -1,9 +1,8 @@
 package com.meshchats.app.data.local
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -27,7 +26,17 @@ interface MessageDao {
     )
     fun observeLatestPerConversation(): Flow<List<MessageEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    /**
+     * Insert a new message, or update the existing row with the same id in place.
+     *
+     * Uses [Upsert] (INSERT ... ON CONFLICT DO UPDATE) rather than
+     * `@Insert(onConflict = REPLACE)`. REPLACE deletes the conflicting row before
+     * re-inserting, which would cascade-delete any child `ciphertext_outbox` rows
+     * (and their `delivery_attempts`) that reference this message via its foreign
+     * key. Upsert mutates the row in place, so updating a queued message's
+     * delivery fields never destroys its pending outbox packet.
+     */
+    @Upsert
     suspend fun upsert(message: MessageEntity)
 
     @Query("DELETE FROM messages WHERE conversation_id = :conversationId")
