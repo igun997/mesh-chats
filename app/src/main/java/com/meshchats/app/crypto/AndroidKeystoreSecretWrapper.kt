@@ -67,7 +67,7 @@ internal fun classifyKeystoreUnwrapError(error: Throwable?): SecretUnwrapError {
 class AndroidKeystoreSecretWrapper(
     private val alias: String,
     private val keyStoreProvider: String = ANDROID_KEY_STORE,
-) : SecretWrapper {
+) : SecretWrapper, KeyMaterialDestroyer {
 
     companion object {
         private const val ANDROID_KEY_STORE = "AndroidKeyStore"
@@ -114,6 +114,54 @@ class AndroidKeystoreSecretWrapper(
             // than as a null lookup, and must be reported as KEY_LOST. Tamper (bad
             // AEAD tag) and operational failures are classified from the same chain.
             UnwrapResult.Failure(classifyKeystoreUnwrapError(e))
+        }
+    }
+
+    /**
+     * Destroys this wrapper's Keystore alias, making every secret ever wrapped
+     * under it cryptographically unrecoverable — even if the wrapped blob still
+     * exists on disk, there is no longer any key to unwrap it with.
+     *
+     * Idempotent and fail-closed: an already-absent alias is [WrappingKeyDeleteResult.Deleted];
+     * a delete that cannot be confirmed absent afterward is [WrappingKeyDeleteResult.Failure].
+     * The alias is re-checked after deletion so success is only reported when the
+     * key is genuinely gone. Never throws and never recreates the key.
+     */
+    override fun destroy(): WrappingKeyDeleteResult {
+        val ks = try {
+            loadKeyStore()
+        } catch (_: Exception) {
+            return WrappingKeyDeleteResult.Failure(WrappingKeyDeleteError.STORE_UNAVAILABLE)
+        }
+
+        val present = try {
+            ks.containsAlias(alias)
+        } catch (_: Exception) {
+            // Cannot even determine presence: treat the store as unavailable rather
+            // than claim the key is gone.
+            return WrappingKeyDeleteResult.Failure(WrappingKeyDeleteError.STORE_UNAVAILABLE)
+        }
+        // Already absent: the domain is destroyed. Converges on a repeated wipe.
+        if (!present) return WrappingKeyDeleteResult.Deleted
+
+        try {
+            ks.deleteEntry(alias)
+        } catch (_: Exception) {
+            return WrappingKeyDeleteResult.Failure(WrappingKeyDeleteError.DELETE_FAILED)
+        }
+
+        // Confirm absence: only report success if the alias is genuinely gone, so a
+        // coordinator never over-claims a completed wipe on a silent no-op delete.
+        val stillThere = try {
+            ks.containsAlias(alias)
+        } catch (_: Exception) {
+            // Post-delete check failed: be conservative and report failure.
+            return WrappingKeyDeleteResult.Failure(WrappingKeyDeleteError.DELETE_FAILED)
+        }
+        return if (stillThere) {
+            WrappingKeyDeleteResult.Failure(WrappingKeyDeleteError.DELETE_FAILED)
+        } else {
+            WrappingKeyDeleteResult.Deleted
         }
     }
 

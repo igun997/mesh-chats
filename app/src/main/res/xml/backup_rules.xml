@@ -9,6 +9,11 @@
   the wrapped database key + any other files under noBackupFilesDir is already
   excluded by the platform, and all shared preferences / DataStore. Capturing any
   of these off-device could expose the encrypted database to offline decryption.
+
+
+  The app cache directory is excluded from cloud backup by the Android default
+  (cache is never backed up) and is not under the backed-up files domain; a
+  panic wipe additionally clears it at runtime.
 -->
 <full-backup-content>
     <!-- Encrypted database and its WAL/SHM + migration temp/backup/marker siblings. -->
@@ -20,6 +25,8 @@
     <exclude domain="database" path="mesh-chats.db-wal.pt-bak" />
     <exclude domain="database" path="mesh-chats.db-shm.pt-bak" />
     <exclude domain="database" path="mesh-chats.db.migration" />
+    <exclude domain="database" path="mesh-chats.db.migration.lock" />
+    <exclude domain="database" path="mesh-chats.db-journal" />
     <!-- All app files (covers any wrapped-secret material written to filesDir). -->
     <exclude domain="file" path="." />
     <!-- Preferences / DataStore. -->

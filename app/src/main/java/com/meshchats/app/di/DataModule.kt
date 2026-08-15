@@ -11,7 +11,14 @@ import androidx.room.Room
 import com.meshchats.app.crypto.AndroidDirectorySync
 import com.meshchats.app.crypto.AndroidKeystoreSecretWrapper
 import com.meshchats.app.crypto.AtomicSecretFile
+import com.meshchats.app.crypto.DatabaseCloseOutcome
 import com.meshchats.app.crypto.DatabaseKeyProvider
+import com.meshchats.app.crypto.DefaultPanicWipeCoordinator
+import com.meshchats.app.crypto.KeyDomain
+import com.meshchats.app.crypto.PanicWipeCoordinator
+import com.meshchats.app.crypto.ProductionDatabaseClose
+import com.meshchats.app.crypto.SecureStorageLayout
+import com.meshchats.app.crypto.SensitiveFileDeleter
 import com.meshchats.app.data.local.EncryptedDatabaseOpener
 import com.meshchats.app.data.local.MeshDatabase
 import com.meshchats.app.data.local.MIGRATION_1_2
@@ -35,45 +42,26 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import java.io.File
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object DataModule {
 
-    /**
-     * Keystore alias dedicated to wrapping the database key. It is deliberately
-     * distinct from any identity-key alias so the two secrets are cryptographically
-     * domain-separated at the key level (in addition to the AEAD associated-data
-     * separation inside [DatabaseKeyProvider]).
-     */
-    private const val DB_KEY_ALIAS = "mesh-chats.db-key.v1"
-
-    /** File name of the wrapped database-key record inside `noBackupFilesDir`. */
-    private const val DB_KEY_FILE = "db-key.wrapped"
-
-    /**
-     * Keystore alias dedicated to wrapping the Ed25519 identity secret. It is
-     * deliberately distinct from [DB_KEY_ALIAS] so the identity key and the
-     * database key are domain-separated at the key level: compromising one alias
-     * never yields the other secret.
-     */
-    private const val IDENTITY_KEY_ALIAS = "mesh-chats.identity-key.v1"
-
-    /** File name of the wrapped identity-secret record inside `noBackupFilesDir`. */
-    private const val IDENTITY_KEY_FILE = "identity-key.wrapped"
-
     @Provides
     @Singleton
     fun provideDatabaseKeyProvider(@ApplicationContext context: Context): DatabaseKeyProvider {
         // The wrapped key lives in noBackupFilesDir: it must never be captured by
         // cloud/adb backup (the encrypted database it protects would otherwise be
-        // decryptable off-device) and never leave this device.
-        val keyFile = File(context.noBackupFilesDir, DB_KEY_FILE)
+        // decryptable off-device) and never leave this device. The alias and file
+        // name come from SecureStorageLayout so provisioning and panic wipe agree.
         return DatabaseKeyProvider(
-            wrapper = AndroidKeystoreSecretWrapper(alias = DB_KEY_ALIAS),
-            file = AtomicSecretFile(target = keyFile, directorySync = AndroidDirectorySync()),
+            wrapper = AndroidKeystoreSecretWrapper(alias = SecureStorageLayout.DB_KEY_ALIAS),
+            file = AtomicSecretFile(
+                target = SecureStorageLayout.dbKeyFile(context),
+                directorySync = AndroidDirectorySync(),
+            ),
         )
     }
 
@@ -113,7 +101,7 @@ object DataModule {
             // their defaults (e.g. BLE discovery re-enables) instead of crashing.
             corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
         ) {
-            context.preferencesDataStoreFile("mesh_chats_prefs")
+            context.preferencesDataStoreFile(SecureStorageLayout.PREFS_FILE)
         }
 
     @Provides
@@ -147,13 +135,13 @@ object DataModule {
         store: IdentityStore,
     ): DeviceIdentityRepository {
         val secretFile = AtomicSecretFile(
-            target = File(context.noBackupFilesDir, IDENTITY_KEY_FILE),
+            target = SecureStorageLayout.identityKeyFile(context),
             directorySync = AndroidDirectorySync(),
         )
         return DefaultDeviceIdentityRepository(
             crypto = crypto,
             signalFactory = signalFactory,
-            wrapper = AndroidKeystoreSecretWrapper(alias = IDENTITY_KEY_ALIAS),
+            wrapper = AndroidKeystoreSecretWrapper(alias = SecureStorageLayout.IDENTITY_KEY_ALIAS),
             secretFile = secretFile,
             store = store,
             fourWords = FourWordFingerprint(FourWordList.load()),
@@ -162,17 +150,100 @@ object DataModule {
     }
 
     /**
-     * Key-first panic wipe: deletes the wrapped identity secret file first (the
-     * irreversible step), then best-effort clears derived DB state. Full duress UI
-     * is wired later; this provides the authoritative, correctly ordered hook.
+     * Lower-level Ed25519-only panic hook, retained for callers that only need to
+     * delete the wrapped identity secret file. It deliberately makes no claim of
+     * total destruction. Production duress handling should use the authoritative
+     * [PanicWipeCoordinator] instead — this hook is not the app-level entry point.
      */
     @Provides
     @Singleton
     fun provideIdentityPanicWipe(@ApplicationContext context: Context): IdentityPanicWipe {
         val secretFile = AtomicSecretFile(
-            target = File(context.noBackupFilesDir, IDENTITY_KEY_FILE),
+            target = SecureStorageLayout.identityKeyFile(context),
             directorySync = AndroidDirectorySync(),
         )
         return DefaultIdentityPanicWipe(secretFile = secretFile)
+    }
+
+    /**
+     * Authoritative, key-first app-level panic wipe. On a duress signal it destroys
+     * BOTH persistent key domains first — each dedicated Keystore alias plus its
+     * sole wrapped blob — rendering all data at rest cryptographically
+     * unrecoverable, closes the encrypted database to release its file handle, then
+     * best-effort deletes the now-inert data files (including nondeterministic temp/
+     * lock residues and the cache directory).
+     *
+     * ### Why it reports RESTART_REQUIRED for the database close
+     * SQLCipher's `SupportOpenHelperFactory` retains the raw-key byte array by
+     * reference for the database's lifetime and re-keys every connection from it
+     * (see [EncryptedDatabaseOpener]); the array is never exposed for zeroing. We
+     * therefore cannot zero the in-memory raw key in place, so the close step
+     * ([ProductionDatabaseClose]) honestly reports
+     * [DatabaseCloseOutcome.RESTART_REQUIRED] even on a clean close: data at rest is
+     * unrecoverable once the wrapping keys are gone, but a process restart is
+     * required to guarantee no key bytes linger in RAM. This caps the outcome at
+     * [com.meshchats.app.crypto.PanicWipeOutcome.KEYS_DESTROYED_DATA_PARTIAL] rather
+     * than falsely claiming COMPLETE in production.
+     *
+     * ### Caller MUST terminate the process
+     * Because production always yields `processRestartRequired == true`, the duress
+     * caller/UI MUST terminate the process immediately after this wipe returns
+     * (e.g. `Runtime.getRuntime().halt(0)`). The coordinator returns a report rather
+     * than killing the process itself — the UI trigger is out of scope here — so the
+     * app CANNOT reach [com.meshchats.app.crypto.PanicWipeOutcome.COMPLETE] today; the
+     * strongest honest production outcome is KEYS_DESTROYED_DATA_PARTIAL.
+     *
+     * The database is injected as a [Provider] so the panic-wipe graph does not force
+     * the (expensive, disk-touching) database open at coordinator construction; the
+     * close step resolves and closes it only when a wipe actually runs.
+     */
+    @Provides
+    @Singleton
+    fun providePanicWipeCoordinator(
+        @ApplicationContext context: Context,
+        database: Provider<MeshDatabase>,
+    ): PanicWipeCoordinator {
+        // One symlink-safe deleter instance threaded through both key domains AND
+        // the coordinator's data cleanup, so every delete on the wipe path shares
+        // the same (NOFOLLOW_LINKS) semantics and there is no second deleter to drift.
+        val deleter = SensitiveFileDeleter.Default
+        val dbDomain = KeyDomain(
+            destroyer = AndroidKeystoreSecretWrapper(alias = SecureStorageLayout.DB_KEY_ALIAS),
+            wrappedBlob = SecureStorageLayout.dbKeyFile(context),
+            deleter = deleter,
+        )
+        val identityDomain = KeyDomain(
+            destroyer = AndroidKeystoreSecretWrapper(alias = SecureStorageLayout.IDENTITY_KEY_ALIAS),
+            wrappedBlob = SecureStorageLayout.identityKeyFile(context),
+            deleter = deleter,
+        )
+        return DefaultPanicWipeCoordinator(
+            databaseKeyDomain = dbDomain,
+            identityKeyDomain = identityDomain,
+            // Actually close the encrypted database so its open-helper releases the
+            // file before we delete it. The retained SQLCipher raw key cannot be
+            // exposed for in-place zeroing, so ProductionDatabaseClose always reports
+            // RESTART_REQUIRED: the wrapping keys are already destroyed above, so data
+            // at rest is unrecoverable, but the caller must terminate the process to
+            // clear the in-RAM key.
+            closeDatabase = { ProductionDatabaseClose.run { database.get().close() } },
+            sensitiveFiles = {
+                buildList {
+                    // Fixed database siblings (db/WAL/SHM/journal + migration side files).
+                    addAll(SecureStorageLayout.databaseFiles(context))
+                    // Nondeterministic migration-marker temp siblings.
+                    addAll(SecureStorageLayout.databaseResidueSiblings(context))
+                    // Preferences / DataStore.
+                    addAll(SecureStorageLayout.preferenceFiles(context))
+                    // Wrapped key blobs (also removed per key domain; included so the
+                    // residue check covers them) plus their temp/lock siblings.
+                    addAll(SecureStorageLayout.secretFiles(context))
+                    addAll(SecureStorageLayout.secretResidueSiblings(context))
+                    // Cache directory contents (bottom-up so children precede parents).
+                    addAll(SecureStorageLayout.cacheResidues(context))
+                }
+            },
+            deleter = deleter,
+        )
     }
 }

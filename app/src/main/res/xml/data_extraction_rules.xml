@@ -10,6 +10,11 @@
   migration side files), all app files (any wrapped-secret material), and shared
   preferences / DataStore. Capturing any of these off-device could expose the
   encrypted database to offline decryption.
+
+
+  The app cache directory is excluded from cloud backup by the Android default
+  (cache is never backed up) and is not under the backed-up files domain; a
+  panic wipe additionally clears it at runtime.
 -->
 <data-extraction-rules>
     <cloud-backup>
@@ -21,6 +26,8 @@
         <exclude domain="database" path="mesh-chats.db-wal.pt-bak" />
         <exclude domain="database" path="mesh-chats.db-shm.pt-bak" />
         <exclude domain="database" path="mesh-chats.db.migration" />
+        <exclude domain="database" path="mesh-chats.db.migration.lock" />
+        <exclude domain="database" path="mesh-chats.db-journal" />
         <exclude domain="file" path="." />
         <exclude domain="sharedpref" path="." />
     </cloud-backup>
@@ -33,6 +40,8 @@
         <exclude domain="database" path="mesh-chats.db-wal.pt-bak" />
         <exclude domain="database" path="mesh-chats.db-shm.pt-bak" />
         <exclude domain="database" path="mesh-chats.db.migration" />
+        <exclude domain="database" path="mesh-chats.db.migration.lock" />
+        <exclude domain="database" path="mesh-chats.db-journal" />
         <exclude domain="file" path="." />
         <exclude domain="sharedpref" path="." />
     </device-transfer>
