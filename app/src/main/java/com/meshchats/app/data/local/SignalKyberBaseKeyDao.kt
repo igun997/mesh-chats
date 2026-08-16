@@ -65,6 +65,14 @@ abstract class SignalKyberBaseKeyDao {
      *
      * [baseKey] is bounded up front via [SignalKyberBaseKeyBounds]; an out-of-bound
      * blob is a caller bug and fails fast before any row is touched.
+     *
+     * [BlockingSignalStoreDao.markKyberUsedWithBaseKeyBlocking] is the synchronous
+     * mirror of this method for libsignal's native `markKyberPreKeyUsed` callback.
+     * Both share the exact-triple UNIQUE-constraint semantics, up-front bounding,
+     * bounded [MarkKyberUsedResult] contract, and `signal_kyber_base_keys` schema;
+     * they differ only in `suspend` vs. blocking call shape. Any change to the
+     * replay semantics or schema here must be mirrored there, and both are covered
+     * by their own tests.
      */
     @Transaction
     open suspend fun markKyberUsedWithBaseKey(

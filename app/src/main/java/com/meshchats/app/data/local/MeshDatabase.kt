@@ -31,6 +31,15 @@ abstract class MeshDatabase : RoomDatabase() {
     abstract fun signalSignedPreKeyDao(): SignalSignedPreKeyDao
     abstract fun signalKyberPreKeyDao(): SignalKyberPreKeyDao
     abstract fun signalKyberBaseKeyDao(): SignalKyberBaseKeyDao
+
+    /**
+     * Blocking (synchronous) DAO dedicated to libsignal's synchronous store
+     * callbacks. Backs [RoomSignalProtocolStore]; must only be called off the main
+     * thread on the dedicated crypto dispatcher, inside an outer transaction. No
+     * schema change: it is an additional DAO over the existing v3 Signal tables.
+     */
+    abstract fun blockingSignalStoreDao(): BlockingSignalStoreDao
+
     abstract fun outboxDao(): OutboxDao
     abstract fun identityProvisioningDao(): IdentityProvisioningDao
 
