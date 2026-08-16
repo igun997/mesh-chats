@@ -186,3 +186,43 @@ val MIGRATION_1_2: Migration = object : Migration(1, 2) {
         )
     }
 }
+
+/**
+ * Explicit, non-destructive schema upgrade from v2 to v3. Adds the
+ * `signal_kyber_base_keys` replay-state table (PQXDH Kyber base-key reuse
+ * detection) with its foreign key to `signal_kyber_prekeys` (cascade) and the
+ * exact-triple UNIQUE index plus the Kyber-id lookup index.
+ *
+ * Every statement reproduces Room's generated v3 schema exactly — column order,
+ * affinities, `NOT NULL`, the autoincrement surrogate primary key, the foreign
+ * key, and index names — or Room's post-migration `validateMigration` check will
+ * fail. All v2 rows are untouched; this migration is purely additive.
+ *
+ * There is no destructive fallback: a missing or failed migration must surface
+ * loudly rather than drop user data.
+ */
+val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // --- signal_kyber_base_keys (FK → signal_kyber_prekeys, cascade) ---
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `signal_kyber_base_keys` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`kyber_prekey_id` INTEGER NOT NULL, " +
+                "`signed_prekey_id` INTEGER NOT NULL, " +
+                "`base_key` BLOB NOT NULL, " +
+                "`first_seen_at` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`kyber_prekey_id`) REFERENCES `signal_kyber_prekeys`(`kyber_prekey_id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        // Exact-triple uniqueness at the DB level (concurrency-safe duplicate detection).
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_signal_kyber_base_keys_triple` " +
+                "ON `signal_kyber_base_keys` (`kyber_prekey_id`, `signed_prekey_id`, `base_key`)",
+        )
+        // Kyber-id lookup index (cascade + audit queries).
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_signal_kyber_base_keys_kyber_prekey_id` " +
+                "ON `signal_kyber_base_keys` (`kyber_prekey_id`)",
+        )
+    }
+}

@@ -22,6 +22,7 @@ import com.meshchats.app.crypto.SensitiveFileDeleter
 import com.meshchats.app.data.local.EncryptedDatabaseOpener
 import com.meshchats.app.data.local.MeshDatabase
 import com.meshchats.app.data.local.MIGRATION_1_2
+import com.meshchats.app.data.local.MIGRATION_2_3
 import com.meshchats.app.data.local.MessageDao
 import com.meshchats.app.crypto.identity.BouncyCastleEd25519Crypto
 import com.meshchats.app.crypto.identity.DefaultDeviceIdentityRepository
@@ -82,7 +83,7 @@ object DataModule {
             .openHelperFactory(opener.createFactory())
             // Explicit, non-destructive schema upgrade. MIGRATION_1_2 creates the
             // Signal, identity, and outbox tables and extends messages additively.
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             // Never destroy data on an unexpected schema state. No fallback destructive
             // migration/downgrade: a missing migration or downgrade must surface loudly
             // rather than silently dropping user data.

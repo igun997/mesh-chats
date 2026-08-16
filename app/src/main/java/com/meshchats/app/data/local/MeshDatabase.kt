@@ -14,10 +14,11 @@ import androidx.room.RoomDatabase
         SignalPreKeyEntity::class,
         SignalSignedPreKeyEntity::class,
         SignalKyberPreKeyEntity::class,
+        SignalKyberBaseKeyEntity::class,
         CiphertextOutboxEntity::class,
         DeliveryAttemptEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class MeshDatabase : RoomDatabase() {
@@ -29,6 +30,7 @@ abstract class MeshDatabase : RoomDatabase() {
     abstract fun signalPreKeyDao(): SignalPreKeyDao
     abstract fun signalSignedPreKeyDao(): SignalSignedPreKeyDao
     abstract fun signalKyberPreKeyDao(): SignalKyberPreKeyDao
+    abstract fun signalKyberBaseKeyDao(): SignalKyberBaseKeyDao
     abstract fun outboxDao(): OutboxDao
     abstract fun identityProvisioningDao(): IdentityProvisioningDao
 
