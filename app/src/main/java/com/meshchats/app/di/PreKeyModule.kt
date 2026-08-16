@@ -7,25 +7,34 @@ import com.meshchats.app.crypto.prekey.PreKeyIdGenerator
 import com.meshchats.app.crypto.prekey.SignalKeyMaterialFactory
 import com.meshchats.app.crypto.prekey.SignalPreKeyManager
 import com.meshchats.app.crypto.prekey.SignalTransactionRunner
+import com.meshchats.app.crypto.session.DefaultSignalCryptoEngine
+import com.meshchats.app.crypto.session.SignalCryptoEngine
 import com.meshchats.app.data.local.MeshDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import java.security.SecureRandom
+import java.time.Instant
 import java.util.concurrent.Callable
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Wires the PQXDH prekey inventory manager.
+ * Wires the PQXDH prekey inventory manager and the Signal crypto engine.
  *
  * The crypto dispatcher is single-parallelism (`Dispatchers.IO.limitedParallelism(1)`)
  * so every libsignal native call and Signal Room access is serialized onto one
  * worker — libsignal's store callbacks are synchronous and its native sessions are
  * not safe to drive concurrently. The transaction runner wraps
- * `MeshDatabase.runInTransaction` so a whole inventory batch commits atomically.
+ * `MeshDatabase.runInTransaction` so a whole inventory batch, or a whole
+ * session/encrypt/decrypt operation with all its store callbacks, commits atomically.
+ *
+ * The engine reuses the SAME dispatcher, transaction runner, and prekey manager as
+ * the inventory provider, so inventory and session work never race. Like the prekey
+ * manager, the engine is resolved only where it is injected — after the startup gate
+ * has provisioned the encrypted database — so no engine or DB is created before Ready.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -68,5 +77,23 @@ object PreKeyModule {
             idGenerator = PreKeyIdGenerator(randomInt = SecureRandom()::nextInt),
             transactionRunner = transactionRunner,
             dispatcher = dispatcher,
+        )
+
+    @Provides
+    @Singleton
+    fun provideSignalCryptoEngine(
+        identityRepository: DeviceIdentityRepository,
+        preKeyManager: SignalPreKeyManager,
+        database: MeshDatabase,
+        transactionRunner: SignalTransactionRunner,
+        @SignalCryptoDispatcher dispatcher: CoroutineDispatcher,
+    ): SignalCryptoEngine =
+        DefaultSignalCryptoEngine(
+            identityRepository = identityRepository,
+            preKeyManager = preKeyManager,
+            dao = database.blockingSignalStoreDao(),
+            transactionRunner = transactionRunner,
+            dispatcher = dispatcher,
+            clock = Instant::now,
         )
 }
