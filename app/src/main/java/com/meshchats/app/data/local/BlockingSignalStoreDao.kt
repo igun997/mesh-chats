@@ -200,4 +200,107 @@ abstract class BlockingSignalStoreDao {
         markKyberUsed(kyberId)
         return MarkKyberUsedResult.MARKED
     }
+
+    // --- Inventory provisioning (Task 4) -----------------------------------
+    //
+    // These read the LIVE prekey pools the app-owned prekey manager provisions
+    // against, and insert freshly generated keys. Like every method here they are
+    // synchronous and MUST run off the main thread on the crypto dispatcher inside
+    // an outer transaction opened by the manager, so a count → generate → insert
+    // ensure is a consistent, atomic snapshot. No schema change: these are
+    // additional queries over the existing v3 Signal tables.
+
+    /** Count of one-time EC prekeys currently stored (all are unused; consumption deletes). */
+    @Query("SELECT COUNT(*) FROM signal_prekeys")
+    abstract fun oneTimePreKeyCount(): Int
+
+    /** Every stored one-time EC prekey id, ascending. */
+    @Query("SELECT prekey_id FROM signal_prekeys ORDER BY prekey_id ASC")
+    abstract fun oneTimePreKeyIds(): List<Int>
+
+    /**
+     * The oldest stored one-time EC prekey (ascending id), or null when none is
+     * available. Publishing a one-time EC prekey does NOT delete it — consumption
+     * happens later when libsignal removes it during session establishment.
+     */
+    @Query("SELECT * FROM signal_prekeys ORDER BY prekey_id ASC LIMIT 1")
+    abstract fun oldestOneTimePreKey(): SignalPreKeyEntity?
+
+    /** True iff a one-time EC prekey with [id] exists. */
+    @Query("SELECT COUNT(*) FROM signal_prekeys WHERE prekey_id = :id")
+    abstract fun preKeyIdCount(id: Int): Int
+
+    /** Count of active (non-consumed) signed EC prekeys. Signed keys are never marked used here. */
+    @Query("SELECT COUNT(*) FROM signal_signed_prekeys")
+    abstract fun signedPreKeyTotal(): Int
+
+    /** The most-recently created signed EC prekey, or null when none exists. */
+    @Query("SELECT * FROM signal_signed_prekeys ORDER BY created_at DESC, signed_prekey_id DESC LIMIT 1")
+    abstract fun latestSignedPreKey(): SignalSignedPreKeyEntity?
+
+    /** True iff a signed EC prekey with [id] exists. */
+    @Query("SELECT COUNT(*) FROM signal_signed_prekeys WHERE signed_prekey_id = :id")
+    abstract fun signedPreKeyIdCount(id: Int): Int
+
+    /**
+     * Insert a freshly generated signed EC prekey. IGNORE-on-conflict so a
+     * concurrent same-id insert is a no-op (non-positive rowid) rather than
+     * replacing a live signed key; the manager recounts/retries on conflict.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract fun insertSignedPreKeyIfAbsent(signedPreKey: SignalSignedPreKeyEntity): Long
+
+    /** Count of unused, NON-last-resort one-time Kyber prekeys. */
+    @Query("SELECT COUNT(*) FROM signal_kyber_prekeys WHERE used = 0 AND last_resort = 0")
+    abstract fun unusedOneTimeKyberCount(): Int
+
+    /** Count of last-resort Kyber prekeys (used or not; last-resort is reusable). */
+    @Query("SELECT COUNT(*) FROM signal_kyber_prekeys WHERE last_resort = 1")
+    abstract fun lastResortKyberCount(): Int
+
+    /**
+     * The single reusable last-resort Kyber prekey, most-recently created first, or
+     * null when none exists. Published only as a fallback when no unused one-time
+     * Kyber prekey is available.
+     */
+    @Query("SELECT * FROM signal_kyber_prekeys WHERE last_resort = 1 ORDER BY created_at DESC, kyber_prekey_id DESC LIMIT 1")
+    abstract fun latestLastResortKyber(): SignalKyberPreKeyEntity?
+
+    /**
+     * The oldest unused, non-last-resort one-time Kyber prekey (ascending id), or
+     * null when none is available. Publishing a one-time Kyber key does NOT mark it
+     * used — consumption happens later during session establishment.
+     */
+    @Query("SELECT * FROM signal_kyber_prekeys WHERE used = 0 AND last_resort = 0 ORDER BY kyber_prekey_id ASC LIMIT 1")
+    abstract fun oldestUnusedOneTimeKyber(): SignalKyberPreKeyEntity?
+
+    /** True iff a Kyber prekey with [id] exists (any lifecycle/last-resort state). */
+    @Query("SELECT COUNT(*) FROM signal_kyber_prekeys WHERE kyber_prekey_id = :id")
+    abstract fun kyberIdCount(id: Int): Int
+
+    /** Every stored Kyber prekey id (any state), ascending. */
+    @Query("SELECT kyber_prekey_id FROM signal_kyber_prekeys ORDER BY kyber_prekey_id ASC")
+    abstract fun kyberPreKeyIds(): List<Int>
+
+    /** Every stored signed EC prekey id, ascending. */
+    @Query("SELECT signed_prekey_id FROM signal_signed_prekeys ORDER BY signed_prekey_id ASC")
+    abstract fun signedPreKeyIds(): List<Int>
+
+    /**
+     * Insert a freshly generated one-time EC prekey. IGNORE-on-conflict so a
+     * concurrent insert of the same id is a no-op (non-positive rowid) rather than
+     * clobbering an existing key; the manager recounts/retries on a non-positive
+     * result. Returns the inserted rowid, or a non-positive value on conflict.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract fun insertPreKeyIfAbsent(preKey: SignalPreKeyEntity): Long
+
+    /**
+     * Insert a freshly generated Kyber prekey (one-time or last-resort), carrying
+     * its `used` / `last_resort` metadata. IGNORE-on-conflict, same contract as
+     * [insertPreKeyIfAbsent]: a same-id conflict is a no-op the manager detects via
+     * a non-positive rowid, never a metadata-clobbering replace.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract fun insertKyberPreKeyMetadataIfAbsent(kyberPreKey: SignalKyberPreKeyEntity): Long
 }
