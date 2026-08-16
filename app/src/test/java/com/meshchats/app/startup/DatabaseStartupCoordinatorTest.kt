@@ -14,6 +14,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -135,12 +136,19 @@ class DatabaseStartupCoordinatorTest {
         assertTrue("first attempt did not start", entered.await(2, TimeUnit.SECONDS))
         val second = scope.launch { coordinator.initialize() }
         val third = scope.launch { coordinator.initialize() }
-        release.countDown()
+        // Prove both concurrent callers actually entered while the first attempt
+        // was still blocked. They must observe Initializing and return before we
+        // release the failing attempt. Releasing immediately after launch is a
+        // race: a queued caller may start only after Failed is published, where it
+        // correctly represents an explicit retry and would open again.
         runBlocking {
-            first.join()
-            second.join()
-            third.join()
+            withTimeout(2_000) {
+                second.join()
+                third.join()
+            }
         }
+        release.countDown()
+        runBlocking { first.join() }
 
         assertEquals(1, opens.get())
         assertEquals(
