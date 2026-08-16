@@ -136,7 +136,14 @@ interface SignalKyberPreKeyDao {
 
     suspend fun contains(id: Int): Boolean = count(id) > 0
 
-    @Query("UPDATE signal_kyber_prekeys SET used = 1 WHERE kyber_prekey_id = :id")
+    // Consuming a one-time Kyber prekey also clears any recipient reservation (v4),
+    // freeing its slot. Last-resort keys are never per-recipient reserved, so this
+    // is a no-op for them and preserves their reusable last-resort semantics.
+    @Query(
+        "UPDATE signal_kyber_prekeys SET used = 1, " +
+            "reserved_for_address = NULL, reserved_for_device_id = NULL, reserved_at = NULL " +
+            "WHERE kyber_prekey_id = :id",
+    )
     suspend fun markUsed(id: Int)
 
     @Query("DELETE FROM signal_kyber_prekeys WHERE kyber_prekey_id = :id")

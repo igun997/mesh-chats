@@ -226,3 +226,79 @@ val MIGRATION_2_3: Migration = object : Migration(2, 3) {
         )
     }
 }
+
+/**
+ * Explicit, non-destructive schema upgrade from v3 to v4 (verified-contact bundle
+ * schema). Purely additive:
+ *
+ *  - Extends `contact_identities` with the verified Signal binding fields:
+ *    `device_id` (default 1), the nullable `signal_identity_key` /
+ *    `signal_binding_signature` blobs, and `signal_binding_version` (default 0).
+ *    A contact migrated from v3 therefore keeps its row but is left unusable until
+ *    reverified: null Signal identity + version 0 means "no verified binding on
+ *    record".
+ *  - Creates `contact_prekey_bundles` (one bundle per contact, FK → contact,
+ *    cascade) with its `expires_at` and `device_id` indexes.
+ *  - Extends `signal_prekeys` and `signal_kyber_prekeys` with the nullable
+ *    reservation columns and a UNIQUE composite index over
+ *    `(reserved_for_address, reserved_for_device_id)` on each. SQLite treats
+ *    `(null, null)` as distinct, so every existing (unreserved) row stays valid
+ *    and at most one active reservation per recipient per key kind is enforced.
+ *
+ * Every statement reproduces Room's generated v4 schema exactly — column order,
+ * affinities, `NOT NULL`, defaults, foreign keys, and index names — or Room's
+ * post-migration `validateMigration` check will fail. All v3 rows are untouched.
+ *
+ * There is no destructive fallback: a missing or failed migration must surface
+ * loudly rather than drop user data.
+ */
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // --- Extend contact_identities with the verified binding fields. ---
+        db.execSQL("ALTER TABLE `contact_identities` ADD COLUMN `device_id` INTEGER NOT NULL DEFAULT 1")
+        db.execSQL("ALTER TABLE `contact_identities` ADD COLUMN `signal_identity_key` BLOB")
+        db.execSQL("ALTER TABLE `contact_identities` ADD COLUMN `signal_binding_signature` BLOB")
+        db.execSQL("ALTER TABLE `contact_identities` ADD COLUMN `signal_binding_version` INTEGER NOT NULL DEFAULT 0")
+
+        // --- contact_prekey_bundles (FK → contact_identities, cascade) ---
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `contact_prekey_bundles` (" +
+                "`contact_address` TEXT NOT NULL, " +
+                "`device_id` INTEGER NOT NULL, " +
+                "`encoded_bundle` BLOB NOT NULL, " +
+                "`issued_at` INTEGER NOT NULL, " +
+                "`received_at` INTEGER NOT NULL, " +
+                "`expires_at` INTEGER NOT NULL, " +
+                "`schema_version` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`contact_address`), " +
+                "FOREIGN KEY(`contact_address`) REFERENCES `contact_identities`(`address`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_contact_prekey_bundles_expires_at` " +
+                "ON `contact_prekey_bundles` (`expires_at`)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_contact_prekey_bundles_device_id` " +
+                "ON `contact_prekey_bundles` (`device_id`)",
+        )
+
+        // --- Extend signal_prekeys with reservation columns + UNIQUE index. ---
+        db.execSQL("ALTER TABLE `signal_prekeys` ADD COLUMN `reserved_for_address` TEXT")
+        db.execSQL("ALTER TABLE `signal_prekeys` ADD COLUMN `reserved_for_device_id` INTEGER")
+        db.execSQL("ALTER TABLE `signal_prekeys` ADD COLUMN `reserved_at` INTEGER")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_signal_prekeys_reservation` " +
+                "ON `signal_prekeys` (`reserved_for_address`, `reserved_for_device_id`)",
+        )
+
+        // --- Extend signal_kyber_prekeys with reservation columns + UNIQUE index. ---
+        db.execSQL("ALTER TABLE `signal_kyber_prekeys` ADD COLUMN `reserved_for_address` TEXT")
+        db.execSQL("ALTER TABLE `signal_kyber_prekeys` ADD COLUMN `reserved_for_device_id` INTEGER")
+        db.execSQL("ALTER TABLE `signal_kyber_prekeys` ADD COLUMN `reserved_at` INTEGER")
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_signal_kyber_prekeys_reservation` " +
+                "ON `signal_kyber_prekeys` (`reserved_for_address`, `reserved_for_device_id`)",
+        )
+    }
+}

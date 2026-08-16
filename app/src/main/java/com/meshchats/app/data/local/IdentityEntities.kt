@@ -80,6 +80,15 @@ data class DeviceIdentityEntity(
  * A remote contact device's identity and current trust state. Keyed by the stable
  * [address] (contact/device address string), which is what the outbox and Signal
  * stores reference.
+ *
+ * The [signalIdentityKey] / [signalBindingSignature] / [signalBindingVersion]
+ * fields carry the verified Signal identity binding (v4). They are additive and
+ * default to unbound (null blobs, version 0) so a contact migrated from an earlier
+ * schema is left **unusable until reverified**: the app treats a null Signal
+ * identity or a version-0 binding as "no verified binding on record" and requires
+ * a fresh out-of-band verification before it will start a Signal session with the
+ * contact. [deviceId] defaults to 1 (the primary device) for source
+ * compatibility; the canonical multi-device key remains the [address] for now.
  */
 @Entity(
     tableName = "contact_identities",
@@ -106,6 +115,33 @@ data class ContactIdentityEntity(
     @ColumnInfo(name = "verified_at") val verifiedAt: Long? = null,
 
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+
+    /**
+     * The contact device this identity is for. Defaults to 1 (primary device) for
+     * source compatibility with rows migrated before multi-device support.
+     */
+    @ColumnInfo(name = "device_id", defaultValue = "1") val deviceId: Int = 1,
+
+    /**
+     * The contact's verified Signal public identity key. Opaque public bytes; null
+     * until the contact is (re)verified under v4. A null value means no verified
+     * Signal binding is on record.
+     */
+    @ColumnInfo(name = "signal_identity_key", typeAffinity = ColumnInfo.BLOB)
+    val signalIdentityKey: ByteArray? = null,
+
+    /**
+     * The contact's signature binding their Signal identity to their long-term
+     * identity, captured during verification. Opaque; null until (re)verified.
+     */
+    @ColumnInfo(name = "signal_binding_signature", typeAffinity = ColumnInfo.BLOB)
+    val signalBindingSignature: ByteArray? = null,
+
+    /**
+     * Version of the verified binding scheme. Defaults to 0 ("no verified binding
+     * on record"); a migrated contact stays at 0 until reverified.
+     */
+    @ColumnInfo(name = "signal_binding_version", defaultValue = "0") val signalBindingVersion: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -116,7 +152,12 @@ data class ContactIdentityEntity(
             trustState == other.trustState &&
             firstSeenAt == other.firstSeenAt &&
             verifiedAt == other.verifiedAt &&
-            updatedAt == other.updatedAt
+            updatedAt == other.updatedAt &&
+            deviceId == other.deviceId &&
+            (signalIdentityKey?.contentEquals(other.signalIdentityKey) ?: (other.signalIdentityKey == null)) &&
+            (signalBindingSignature?.contentEquals(other.signalBindingSignature)
+                ?: (other.signalBindingSignature == null)) &&
+            signalBindingVersion == other.signalBindingVersion
     }
 
     override fun hashCode(): Int {
@@ -127,6 +168,10 @@ data class ContactIdentityEntity(
         result = 31 * result + firstSeenAt.hashCode()
         result = 31 * result + (verifiedAt?.hashCode() ?: 0)
         result = 31 * result + updatedAt.hashCode()
+        result = 31 * result + deviceId
+        result = 31 * result + (signalIdentityKey?.contentHashCode() ?: 0)
+        result = 31 * result + (signalBindingSignature?.contentHashCode() ?: 0)
+        result = 31 * result + signalBindingVersion
         return result
     }
 }

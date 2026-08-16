@@ -96,7 +96,7 @@ class MeshDatabaseMigrationTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.databaseBuilder(ctx, MeshDatabase::class.java, TEST_DB)
             .openHelperFactory(SupportOpenHelperFactory(rawKey))
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
         try {
             val list = runBlocking { db.messageDao().observeConversation("c9").first() }

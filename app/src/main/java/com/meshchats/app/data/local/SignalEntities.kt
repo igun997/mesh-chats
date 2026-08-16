@@ -143,8 +143,26 @@ data class SignalSessionEntity(
 /**
  * A one-time prekey, keyed by libsignal prekey id. [record] is the opaque
  * serialized `PreKeyRecord`.
+ *
+ * The nullable reservation columns (v4) let the app-owned prekey publisher
+ * earmark a specific one-time prekey for a specific recipient device before it is
+ * consumed, so two recipients are never handed the same one-time key. The UNIQUE
+ * composite index over `(reserved_for_address, reserved_for_device_id)` enforces
+ * **at most one active reservation per recipient device**; SQLite treats
+ * `(null, null)` rows as distinct, so any number of unreserved prekeys coexist.
+ * There is no foreign key to `contact_identities`: reservations are soft holds the
+ * repository releases explicitly (on contact deletion, expiry, or consumption).
  */
-@Entity(tableName = "signal_prekeys")
+@Entity(
+    tableName = "signal_prekeys",
+    indices = [
+        Index(
+            value = ["reserved_for_address", "reserved_for_device_id"],
+            unique = true,
+            name = "index_signal_prekeys_reservation",
+        ),
+    ],
+)
 data class SignalPreKeyEntity(
     @PrimaryKey @ColumnInfo(name = "prekey_id") val preKeyId: Int,
 
@@ -154,6 +172,15 @@ data class SignalPreKeyEntity(
     @ColumnInfo(name = "schema_version") val schemaVersion: Int,
 
     @ColumnInfo(name = "created_at") val createdAt: Long,
+
+    /** Recipient address this prekey is reserved for, or null when unreserved. */
+    @ColumnInfo(name = "reserved_for_address") val reservedForAddress: String? = null,
+
+    /** Recipient device id this prekey is reserved for, or null when unreserved. */
+    @ColumnInfo(name = "reserved_for_device_id") val reservedForDeviceId: Int? = null,
+
+    /** When the reservation was placed, or null when unreserved. */
+    @ColumnInfo(name = "reserved_at") val reservedAt: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -161,7 +188,10 @@ data class SignalPreKeyEntity(
         return preKeyId == other.preKeyId &&
             record.contentEquals(other.record) &&
             schemaVersion == other.schemaVersion &&
-            createdAt == other.createdAt
+            createdAt == other.createdAt &&
+            reservedForAddress == other.reservedForAddress &&
+            reservedForDeviceId == other.reservedForDeviceId &&
+            reservedAt == other.reservedAt
     }
 
     override fun hashCode(): Int {
@@ -169,6 +199,9 @@ data class SignalPreKeyEntity(
         result = 31 * result + record.contentHashCode()
         result = 31 * result + schemaVersion
         result = 31 * result + createdAt.hashCode()
+        result = 31 * result + (reservedForAddress?.hashCode() ?: 0)
+        result = 31 * result + (reservedForDeviceId ?: 0)
+        result = 31 * result + (reservedAt?.hashCode() ?: 0)
         return result
     }
 }
@@ -210,8 +243,26 @@ data class SignalSignedPreKeyEntity(
  * A Kyber prekey (post-quantum), keyed by libsignal kyber-prekey id. [record] is
  * the opaque serialized `KyberPreKeyRecord`. [used] and [lastResort] carry the
  * lifecycle metadata libsignal's `KyberPreKeyStore` needs.
+ *
+ * The nullable reservation columns (v4) mirror [SignalPreKeyEntity]: the app can
+ * earmark a one-time Kyber prekey for a specific recipient device, enforced by the
+ * UNIQUE composite index over `(reserved_for_address, reserved_for_device_id)`
+ * (at most one active reservation per recipient, multiple `(null, null)` rows
+ * allowed). Last-resort keys are shared fallbacks and are not per-recipient
+ * reserved; consuming a non-last-resort key clears its reservation (see the
+ * mark-used DAOs). No foreign key: reservations are soft holds the repository
+ * releases explicitly.
  */
-@Entity(tableName = "signal_kyber_prekeys")
+@Entity(
+    tableName = "signal_kyber_prekeys",
+    indices = [
+        Index(
+            value = ["reserved_for_address", "reserved_for_device_id"],
+            unique = true,
+            name = "index_signal_kyber_prekeys_reservation",
+        ),
+    ],
+)
 data class SignalKyberPreKeyEntity(
     @PrimaryKey @ColumnInfo(name = "kyber_prekey_id") val kyberPreKeyId: Int,
 
@@ -227,6 +278,15 @@ data class SignalKyberPreKeyEntity(
     @ColumnInfo(name = "schema_version") val schemaVersion: Int,
 
     @ColumnInfo(name = "created_at") val createdAt: Long,
+
+    /** Recipient address this prekey is reserved for, or null when unreserved. */
+    @ColumnInfo(name = "reserved_for_address") val reservedForAddress: String? = null,
+
+    /** Recipient device id this prekey is reserved for, or null when unreserved. */
+    @ColumnInfo(name = "reserved_for_device_id") val reservedForDeviceId: Int? = null,
+
+    /** When the reservation was placed, or null when unreserved. */
+    @ColumnInfo(name = "reserved_at") val reservedAt: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -236,7 +296,10 @@ data class SignalKyberPreKeyEntity(
             used == other.used &&
             lastResort == other.lastResort &&
             schemaVersion == other.schemaVersion &&
-            createdAt == other.createdAt
+            createdAt == other.createdAt &&
+            reservedForAddress == other.reservedForAddress &&
+            reservedForDeviceId == other.reservedForDeviceId &&
+            reservedAt == other.reservedAt
     }
 
     override fun hashCode(): Int {
@@ -246,6 +309,9 @@ data class SignalKyberPreKeyEntity(
         result = 31 * result + lastResort.hashCode()
         result = 31 * result + schemaVersion
         result = 31 * result + createdAt.hashCode()
+        result = 31 * result + (reservedForAddress?.hashCode() ?: 0)
+        result = 31 * result + (reservedForDeviceId ?: 0)
+        result = 31 * result + (reservedAt?.hashCode() ?: 0)
         return result
     }
 }

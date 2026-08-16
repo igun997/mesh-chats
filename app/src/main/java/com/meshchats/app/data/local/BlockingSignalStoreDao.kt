@@ -157,8 +157,74 @@ abstract class BlockingSignalStoreDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract fun insertKyberBaseKey(row: SignalKyberBaseKeyEntity): Long
 
-    @Query("UPDATE signal_kyber_prekeys SET used = 1 WHERE kyber_prekey_id = :id")
+    // Marking a Kyber prekey used also clears any one-time reservation: a consumed
+    // one-time key must free its recipient slot. Last-resort keys are shared
+    // fallbacks that are never per-recipient reserved (their reservation columns are
+    // already null), so clearing here is a no-op for them and leaves the reusable
+    // last-resort semantics (record + last_resort flag) untouched.
+    @Query(
+        "UPDATE signal_kyber_prekeys SET used = 1, " +
+            "reserved_for_address = NULL, reserved_for_device_id = NULL, reserved_at = NULL " +
+            "WHERE kyber_prekey_id = :id",
+    )
     protected abstract fun markKyberUsed(id: Int)
+
+    // --- One-time prekey reservation (v4) ----------------------------------
+    //
+    // The app-owned prekey publisher earmarks a specific one-time prekey for a
+    // specific recipient device before publishing it, so two recipients are never
+    // handed the same one-time key. The UNIQUE composite index on
+    // (reserved_for_address, reserved_for_device_id) enforces at most one active
+    // reservation per recipient per key kind; a second reservation for the same
+    // recipient violates it (the caller treats the resulting exception as "already
+    // reserved"). Reservations are soft holds with no FK: the repository releases
+    // them explicitly on contact deletion/expiry, and consumption (mark-used /
+    // delete) clears them automatically.
+
+    @Query(
+        "UPDATE signal_prekeys SET reserved_for_address = :address, " +
+            "reserved_for_device_id = :deviceId, reserved_at = :reservedAt " +
+            "WHERE prekey_id = :id",
+    )
+    protected abstract fun reservePreKeyRow(id: Int, address: String, deviceId: Int, reservedAt: Long): Int
+
+    /**
+     * Reserve one-time EC prekey [id] for recipient [address]/[deviceId]. Returns
+     * true when the row existed and was updated. Throws if the recipient already
+     * holds a reservation (UNIQUE index violation) — the caller releases first or
+     * treats it as already reserved.
+     */
+    fun reservePreKey(id: Int, address: String, deviceId: Int, reservedAt: Long): Boolean =
+        reservePreKeyRow(id, address, deviceId, reservedAt) > 0
+
+    @Query(
+        "UPDATE signal_prekeys SET reserved_for_address = NULL, " +
+            "reserved_for_device_id = NULL, reserved_at = NULL " +
+            "WHERE reserved_for_address = :address AND reserved_for_device_id = :deviceId",
+    )
+    abstract fun releasePreKeyReservation(address: String, deviceId: Int): Int
+
+    @Query(
+        "UPDATE signal_kyber_prekeys SET reserved_for_address = :address, " +
+            "reserved_for_device_id = :deviceId, reserved_at = :reservedAt " +
+            "WHERE kyber_prekey_id = :id",
+    )
+    protected abstract fun reserveKyberPreKeyRow(id: Int, address: String, deviceId: Int, reservedAt: Long): Int
+
+    /**
+     * Reserve one-time Kyber prekey [id] for recipient [address]/[deviceId]. Returns
+     * true when the row existed and was updated. Throws on a duplicate recipient
+     * reservation (UNIQUE index violation).
+     */
+    fun reserveKyberPreKey(id: Int, address: String, deviceId: Int, reservedAt: Long): Boolean =
+        reserveKyberPreKeyRow(id, address, deviceId, reservedAt) > 0
+
+    @Query(
+        "UPDATE signal_kyber_prekeys SET reserved_for_address = NULL, " +
+            "reserved_for_device_id = NULL, reserved_at = NULL " +
+            "WHERE reserved_for_address = :address AND reserved_for_device_id = :deviceId",
+    )
+    abstract fun releaseKyberReservation(address: String, deviceId: Int): Int
 
     /**
      * Blocking mirror of [SignalKyberBaseKeyDao.markKyberUsedWithBaseKey].

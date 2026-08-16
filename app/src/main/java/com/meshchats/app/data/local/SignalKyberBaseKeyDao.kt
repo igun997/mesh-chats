@@ -34,7 +34,14 @@ abstract class SignalKyberBaseKeyDao {
     @Query("SELECT COUNT(*) FROM signal_kyber_prekeys WHERE kyber_prekey_id = :id")
     protected abstract suspend fun kyberCount(id: Int): Int
 
-    @Query("UPDATE signal_kyber_prekeys SET used = 1 WHERE kyber_prekey_id = :id")
+    // Mirrors BlockingSignalStoreDao.markKyberUsed: consuming a one-time Kyber
+    // prekey clears its recipient reservation (v4). Last-resort keys are never
+    // reserved, so this is a no-op for them and preserves last-resort semantics.
+    @Query(
+        "UPDATE signal_kyber_prekeys SET used = 1, " +
+            "reserved_for_address = NULL, reserved_for_device_id = NULL, reserved_at = NULL " +
+            "WHERE kyber_prekey_id = :id",
+    )
     protected abstract suspend fun markKyberUsed(id: Int)
 
     @Query(

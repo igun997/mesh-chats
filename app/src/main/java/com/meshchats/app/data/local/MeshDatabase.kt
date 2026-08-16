@@ -8,6 +8,7 @@ import androidx.room.RoomDatabase
         MessageEntity::class,
         DeviceIdentityEntity::class,
         ContactIdentityEntity::class,
+        ContactPreKeyBundleEntity::class,
         SignalIdentityEntity::class,
         SignalTrustedIdentityEntity::class,
         SignalSessionEntity::class,
@@ -18,13 +19,14 @@ import androidx.room.RoomDatabase
         CiphertextOutboxEntity::class,
         DeliveryAttemptEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class MeshDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun deviceIdentityDao(): DeviceIdentityDao
     abstract fun contactIdentityDao(): ContactIdentityDao
+    abstract fun contactPreKeyBundleDao(): ContactPreKeyBundleDao
     abstract fun signalIdentityDao(): SignalIdentityDao
     abstract fun signalSessionDao(): SignalSessionDao
     abstract fun signalPreKeyDao(): SignalPreKeyDao
