@@ -2,9 +2,7 @@ package com.meshchats.app.data.local
 
 import org.signal.libsignal.protocol.IdentityKey
 import org.signal.libsignal.protocol.IdentityKeyPair
-import org.signal.libsignal.protocol.InvalidKeyException
 import org.signal.libsignal.protocol.InvalidKeyIdException
-import org.signal.libsignal.protocol.InvalidMessageException
 import org.signal.libsignal.protocol.NoSessionException
 import org.signal.libsignal.protocol.ReusedBaseKeyException
 import org.signal.libsignal.protocol.SignalProtocolAddress
@@ -83,7 +81,12 @@ class RoomSignalProtocolStore(
         val row = dao.localIdentity() ?: throw SignalStoreException(SignalStoreReason.MISSING_LOCAL_IDENTITY)
         return try {
             IdentityKeyPair(row.identityKeyPair)
-        } catch (_: InvalidKeyException) {
+        } catch (_: Exception) {
+            // libsignal's JNI boundary does not always honor checked exceptions
+            // declared by Java wrappers (SessionRecord, for example, may throw
+            // unchecked InvalidSessionException). Catch Exception—not Throwable—
+            // at stored-record parse boundaries so failures stay bounded while
+            // JVM Errors still propagate.
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -142,7 +145,7 @@ class RoomSignalProtocolStore(
         val row = dao.trustedIdentity(address.name, address.deviceId) ?: return null
         return try {
             IdentityKey(row.identityKey)
-        } catch (_: InvalidKeyException) {
+        } catch (_: Exception) {
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -156,7 +159,7 @@ class RoomSignalProtocolStore(
         val row = dao.session(address.name, address.deviceId) ?: return null
         return try {
             SessionRecord(row.record)
-        } catch (_: InvalidMessageException) {
+        } catch (_: Exception) {
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -172,7 +175,7 @@ class RoomSignalProtocolStore(
                 ?: throw NoSessionException(address, "no session for requested address")
             out += try {
                 SessionRecord(row.record)
-            } catch (_: InvalidMessageException) {
+            } catch (_: Exception) {
                 throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
             }
         }
@@ -223,7 +226,7 @@ class RoomSignalProtocolStore(
         val row = dao.preKey(preKeyId) ?: throw InvalidKeyIdException("No such prekeyrecord!")
         return try {
             PreKeyRecord(row.record)
-        } catch (_: InvalidMessageException) {
+        } catch (_: Exception) {
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -257,7 +260,7 @@ class RoomSignalProtocolStore(
         val row = dao.signedPreKey(signedPreKeyId) ?: throw InvalidKeyIdException("No such signedprekeyrecord!")
         return try {
             SignedPreKeyRecord(row.record)
-        } catch (_: InvalidMessageException) {
+        } catch (_: Exception) {
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -266,7 +269,7 @@ class RoomSignalProtocolStore(
         return dao.allSignedPreKeys().map { row ->
             try {
                 SignedPreKeyRecord(row.record)
-            } catch (_: InvalidMessageException) {
+            } catch (_: Exception) {
                 throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
             }
         }
@@ -301,7 +304,7 @@ class RoomSignalProtocolStore(
         val row = dao.kyberPreKey(kyberPreKeyId) ?: throw InvalidKeyIdException("No such kyberprekeyrecord!")
         return try {
             KyberPreKeyRecord(row.record)
-        } catch (_: InvalidMessageException) {
+        } catch (_: Exception) {
             throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
         }
     }
@@ -310,7 +313,7 @@ class RoomSignalProtocolStore(
         return dao.allKyberPreKeys().map { row ->
             try {
                 KyberPreKeyRecord(row.record)
-            } catch (_: InvalidMessageException) {
+            } catch (_: Exception) {
                 throw SignalStoreException(SignalStoreReason.CORRUPT_RECORD)
             }
         }
