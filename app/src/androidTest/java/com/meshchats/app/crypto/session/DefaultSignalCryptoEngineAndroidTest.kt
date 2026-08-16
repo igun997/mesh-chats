@@ -32,6 +32,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.signal.libsignal.protocol.IdentityKeyPair
+import org.signal.libsignal.protocol.ReusedBaseKeyException
 import org.signal.libsignal.protocol.SignalProtocolAddress
 import org.signal.libsignal.protocol.util.KeyHelper
 import java.security.SecureRandom
@@ -330,6 +331,42 @@ class DefaultSignalCryptoEngineAndroidTest {
         // No session or trusted identity written for the mismatched peer.
         val dao = aliceDb.blockingSignalStoreDao()
         assertEquals(0, dao.sessionCount(wrongBobPeer.protocolName, wrongBobPeer.deviceId))
+    }
+
+    @Test
+    fun reusedBaseKeyExceptionMapsToBoundedEngineError() = runBlocking {
+        // Build a valid incoming PREKEY whose embedded Bob identity matches the
+        // verified peer, then inject a transaction boundary that fails exactly as
+        // libsignal's Kyber replay callback would. This pins exception hierarchy:
+        // ReusedBaseKeyException extends InvalidMessageException and must map to
+        // REUSED_BASE_KEY, never generic MALFORMED_MESSAGE.
+        val alice = engine(aliceDb, aliceFingerprint)
+        val aliceBundle = (alice.createPublishedBundle() as SignalBundleResult.Success).bundle
+        val alicePeerForBob = VerifiedSignalPeer(
+            fingerprintSha256 = aliceFingerprint,
+            deviceId = aliceBundle.deviceId,
+            expectedSignalIdentityKey = aliceBundle.identityKey,
+        )
+        val bob = engine(bobDb, bobFingerprint)
+        assertTrue(bob.establishSession(alicePeerForBob, aliceBundle) is SignalSessionResult.Success)
+        val prekey = (bob.encrypt(alicePeerForBob, "replay".toByteArray()) as SignalEncryptResult.Success).ciphertext
+
+        val replayRunner = object : SignalTransactionRunner {
+            override fun <T> runInTransaction(block: () -> T): T = throw ReusedBaseKeyException()
+        }
+        val aliceWithReplayFailure = engine(
+            db = aliceDb,
+            fingerprint = aliceFingerprint,
+            transactionRunner = replayRunner,
+        )
+        val verifiedBob = VerifiedSignalPeer(
+            fingerprintSha256 = bobFingerprint,
+            deviceId = 1,
+            expectedSignalIdentityKey = bobIdentity.publicKey.serialize(),
+        )
+
+        val result = aliceWithReplayFailure.decrypt(verifiedBob, prekey)
+        assertEquals(SignalCryptoError.REUSED_BASE_KEY, (result as SignalDecryptResult.Failure).error)
     }
 
     @Test
