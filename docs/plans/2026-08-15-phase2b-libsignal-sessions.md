@@ -71,3 +71,23 @@ On Samsung A22 with two isolated SQLCipher Room databases:
 - last-resort Kyber remains available while duplicate base key is rejected.
 
 Run protocol/app JVM/device suites, lint, release/R8. Security/spec review before phase close.
+
+## Phase 2C distribution requirements
+
+Before any prekey bundle leaves the device:
+
+- allocate/reserve one-time EC prekeys per verified recipient (generic repeated publication currently returns the same oldest key until consumption, so stale-key failure must not become normal transport behavior);
+- enforce a signed-prekey/bundle freshness policy using `issuedAtEpochMillis`, with bounded clock skew and an explicit offline-validity window;
+- treat stale/already-consumed one-time prekeys as retryable by fetching a fresh recipient-specific bundle; never silently downgrade trust or identity binding.
+
+## Completion record
+
+Completed across commits `80a021d` through `517d396`, with verification hardening in `2ad0307` and `5de73f0`. Final gate on Samsung A22 (`SM-A225F`, API 33):
+
+- `:mesh-protocol:test`: 142 tests, 0 failures/errors/skips.
+- `:app:testDebugUnitTest`: 408 tests, 0 failures/errors/skips.
+- `:app:connectedDebugAndroidTest`: 136 tests, 0 failures/errors/skips.
+- `:app:lintDebug`: passed.
+- `:app:assembleRelease`: passed with R8/resource shrinking.
+
+Phase 2B is complete. Message/outbox integration and recipient-specific bundle distribution remain Phase 2C.
